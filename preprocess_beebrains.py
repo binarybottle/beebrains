@@ -81,14 +81,14 @@ save_montages = 0  # Save for visualizing results:
 save_movie = 0  # Very memory intensive -- better to use another program such as GraphicConverter
 
 def convert2png(stem):
-'''Convert nifti file to jpeg and png'''
+    '''Convert nifti file to jpeg and png'''
     cmd = [ANTS+'ConvertToJpg', stem + '.nii.gz', stem + '.jpg']
     print(' '.join(cmd)); os.system(' '.join(cmd))                
     cmd = [IMAGEMAGICK+'convert', stem + '.jpg', stem + '.png']
     print(' '.join(cmd)); os.system(' '.join(cmd))                
 
 def smooth3(image_in,image_out):
-'''Smooth each image with a Gaussian filter, sigma=3'''
+    '''Smooth each image with a Gaussian filter, sigma=3'''
     image_nib = nib.load(image_in)
     image = image_nib.get_data()
     image_smooth = gaussian_filter(image, sigma=3, order=0)
@@ -191,8 +191,8 @@ for itable_file in table_files:
                 image_ref_stem = os.path.join(output_path_images, 'image' + str(iframe_middle+1))
                 transform_stem = os.path.join(output_path_transforms, 'image' + str(iframe+1))
                 transformed_stem = os.path.join(output_path_transformed, 'image' + str(iframe+1))
-
-                if save_affine or save_nonlinear:
+                compute_transform = 1
+                if compute_transform:
                     for ilambda in range(len(lambda_columns)):
                         w = '_' + wavelengths[ilambda]
                         image_ref = image_ref_stem + w + '.nii.gz'
@@ -232,31 +232,11 @@ for itable_file in table_files:
                 # Compute the average of the lambda files' two affine transforms,
                 # then apply it to the ratio of the two lambda files
                 if save_affine_avg or save_nonlinear_avg:
-                    #cmd = ['cp',image_stem + '_' + w1 + '_Affine.txt',image_stem+'_AvgAffine.txt']
-                    #print(' '.join(cmd)); os.system(' '.join(cmd))
-                    h1 = open(transform_stem + '_' + w1 + '_Affine.txt')
-                    h2 = open(transform_stem + '_' + w2 + '_Affine.txt')
-                    L1 = h1.readlines()
-                    L2 = h2.readlines()
-                    L1_params = L1[3].split(' ')
-                    L2_params = L2[3].split(' ')
-                    L1_fixed = L1[4].split(' ')
-                    L2_fixed = L2[4].split(' ')
-                    p1 = str((np.float(L1_params[1]) + np.float(L2_params[1])) / 2)
-                    p2 = str((np.float(L1_params[2]) + np.float(L2_params[2])) / 2)
-                    p3 = str((np.float(L1_params[3]) + np.float(L2_params[3])) / 2)
-                    p4 = str((np.float(L1_params[4]) + np.float(L2_params[4])) / 2)
-                    p5 = str((np.float(L1_params[5]) + np.float(L2_params[5])) / 2)
-                    p6 = str((np.float(L1_params[6]) + np.float(L2_params[6])) / 2)
-                    f1 = str((np.float(L1_fixed[1])  + np.float(L2_fixed[1]))  / 2)
-                    f2 = str((np.float(L1_fixed[2])  + np.float(L2_fixed[2]))  / 2)
-                    L = L1
-                    L[3] = ' '.join([L1_params[0],p1,p2,p3,p4,p5,p6+'\n'])
-                    L[4] = ' '.join([L1_fixed[0],f1,f2+'\n'])
-                    fo = open(transform_stem + '_AvgAffine.txt', 'w')
-                    fo.writelines( L )
-                    fo.close()
-
+                    cmd = [ANTS+'AverageAffineTransform 2',
+                           transform_stem + '_AvgAffine.txt',
+                           transform_stem + '_' + w1 + '_Affine.txt',
+                           transform_stem + '_' + w2 + '_Affine.txt']
+                    print(' '.join(cmd)); os.system(' '.join(cmd))
                 if save_affine_avg:
                     for ilambda in range(len(lambda_columns)):
                         w = '_' + wavelengths[ilambda]
