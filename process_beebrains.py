@@ -16,7 +16,7 @@ Example: python process_beebrains.py bk120309e.lst data output
 Requirements:  
 * Python libraries:  numpy, nipy, nibabel
 
-After:
+With help from Satrajit S. Ghosh and after Bertrand Thirion's examples:
 https://github.com/nipy/nipy/blob/master/examples/labs/demo_dmtx.py
 https://github.com/nipy/nipy/blob/master/examples/labs/example_glm.py
 
