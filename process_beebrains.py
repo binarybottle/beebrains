@@ -3,18 +3,18 @@
 """
 Processing steps:
 
-(1) Compute a design matrix
+(1) Construct a design matrix
 (2) Apply a GLM to all voxels
 (3) Create a contrast image
 
 Outputs: 
 
-Command: python <this file name> <data directory> <output directory>
+Command: python <this file name> <subject string> <data directory>
 
-Example: python process_beebrains.py data output
+Example: python process_beebrains.py bk120309e.lst data output
 
 Requirements:  
-* Python libraries:  nipy
+* Python libraries:  numpy, nipy, nibabel
 
 After:
 https://github.com/nipy/nipy/blob/master/examples/labs/demo_dmtx.py
@@ -24,54 +24,85 @@ https://github.com/nipy/nipy/blob/master/examples/labs/example_glm.py
           arno@binarybottle.com  .  www.binarybottle.com
 """
 
-from nipy.modalities.fmri.design_matrix import make_dmtx
-from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
+import os, sys
 import numpy as np
 import pylab as mp
-import os.path as op
 import nibabel as nib
+from nipy.modalities.fmri.design_matrix import make_dmtx
+from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
 import nipy.labs.glm as GLM
 
-ANTS = '/software/ANTS_1.9/bin/'  # for registration (motion correction)
+########################################
+# Settings
+########################################
 
 xdim = 130  # x dimension for each image
 ydim = 172  # y dimension for each image
 frames_per_run = 232  # number of images captured for each run
-
-########################################
-# Construct a design matrix
-########################################
+num_runs = 10
 
 frametimes = np.linspace(0,2319,2320)
 contrasts = ['awake', 'odor','odor','odor','odor','odor','odor','odor','odor']
 onsets = [1160, 233,465,697,929,1393,1625,1857,2089]
 durations = [1160, 232,232,232,232,232,232,232,232]
 amplitudes = [1, 0.6,0.4,0.3,0.2,0.6,0.4,0.3,0.2]
+
+stack_slices = 1
+plot_design_matrix = 1
+plot_histogram = 1
+plot_contrast = 1
+
+# Command-line arguments
+args = sys.argv[1:]
+if len(args)<2:
+    print("\n\t Please provide a subject string and the name of the data/output directory.")
+    print("\t Example: python " + sys.argv[0] + " bk120309e.lst subject data output")
+    sys.exit()
+else:
+    subject = str(args[0]) # 'bk120309e.lst'
+    out_path = str(args[1])
+
+preprocessed_path = os.path.join(out_path, subject+'_smoothed/')
+preprocessed_volume = os.path.join(out_path, subject+'_smoothed.nii.gz')
+
+########################################
+# Construct a design matrix
+########################################
+
 paradigm = BlockParadigm(con_id=contrasts, onset=onsets, duration=durations, amplitude=amplitudes)
 
 dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR', drift_model='Blank', hfcut=np.inf)
+X = dmtx.matrix
 
-dmtx.matrix
-
-# plot the results
-mp.figure(figsize=(10, 6))
-dmtx.show()
-mp.title('Block design matrix')
-mp.show()
+# Plot the design matrix
+if plot_design_matrix:
+    fig1 = mp.figure(figsize=(10, 6))
+    dmtx.show()
+    mp.title('Block design matrix for ' + subject)
+    mp.show()
+    fig1_file = os.path.join(out_path, subject + '_design_matrix.png')
+    mp.savefig(fig1_file)
 
 ########################################
-# Perform a GLM analysis
+# Apply a GLM to all voxels
 ########################################
+
+nframes = frames_per_run * num_runs
+shape = (xdim,ydim,nframes)
+affine = np.eye(4)
 
 # Load data
-inputvolumes = 'output/bk120309e.lst_smoothed/image*.nii.gz'
-outputvolume = 'output/bk120309e.lst_smoothed.nii.gz'
-
-cmd = [ANTS+'StackSlices', outputvolume, str(xdim), str(ydim), str(frames_per_run), inputvolumes]
-print(' '.join(cmd)); os.system(' '.join(cmd))                
-
-img = nib.load(outputvolume)
-Y = img.get_data()
+if stack_slices:
+    Y = np.zeros(shape)
+    for i in range(1,nframes+1):       
+        img = nib.load(os.path.join(preprocessed_path, 'image'+str(i)+'_AvgWarped_ratio_smooth.nii.gz'))
+        slice = img.get_data()
+        Y[:,:,i-1] = slice
+    img = nib.Nifti1Image(Y, affine)
+    nib.save(img, preprocessed_volume)
+else:
+    img = nib.load(preprocessed_volume)
+    Y = img.get_data()
 
 # GLM fit
 method = "kalman"
@@ -79,25 +110,41 @@ model = "ar1"
 glm = GLM.glm()
 glm.fit(Y.T, X, method=method, model=model)
 
-# specify the contrast [1 -1 0 ..]
+########################################
+# Create a contrast image
+########################################
+
+# Specify the contrast [1 -1 0 ..]
 contrast = np.zeros(X.shape[1])
 contrast[0] = 1
-contrast[1] = - 1
+contrast[1] = -1
+#contrast[2] = 0
 my_contrast = glm.contrast(contrast)
 
-# compute the contrast image related to it
+# Compute the contrast image
 zvals = my_contrast.zscore()
-contrast_image = nib.Nifti1Image(np.reshape(zvals, shape), affine)
+contrast_image = nib.Nifti1Image(zvals, affine)
 
-# if you want to save the contrast as an image
-contrast_path = op.join(swd, 'zmap.nii')
-nib.save(contrast_image, contrast_path)
+# Save the contrast as an image
+contrast_file = os.path.join(out_path, subject+'_zmap.nii.gz')
+nib.save(contrast_image, contrast_file)
 
-print 'wrote some of the results as images in directory %s' % swd
+# Plot histogram
+if plot_histogram:
+    h, c = np.histogram(zvals, 100)
+    fig2 = mp.figure()
+    mp.plot(c[: - 1], h)
+    mp.title('Histogram of the z-values for ' + subject)
+    mp.show()
+    fig2_file = os.path.join(out_path, subject + '_histogram.png')
+    mp.savefig(fig2_file)
 
-h, c = np.histogram(zvals, 100)
-mp.figure()
-mp.plot(c[: - 1], h)
-mp.title('Histogram of the z-values')
-mp.show()
+# Plot contrast image
+if plot_contrast:
+    fig3 = mp.figure()
+    mp.matshow(zvals)
+    mp.title('Contrast image for ' + subject)
+    mp.show()
+    fig3_file = os.path.join(out_path, subject + '_contrast.png')
+    mp.savefig(fig3_file)
 

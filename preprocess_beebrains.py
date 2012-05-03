@@ -61,15 +61,6 @@ table_delimiter = "\t"  # the delimiter between elements of the table
 lambda_columns = [3,18]  # table columns that give the file names for the lambda 1 and 2 images
 wavelengths = ['340nm','380nm']  # lambda 1 and 2 strings
 
-# In config.py:
-#frame_stim1_on = '72'
-#frame_stim1_off = '84'
-#frame_stim2_on = '92'
-#frame_stim2_off = '104'
-#asleep_on = 1
-#awake_onset_filenumber = 6
-#asleep_off = (awake_onset_filenumber - 1) * frames_per_run
-
 #------------------------------------------------------------------------------------------------
 
 # Save image types:
