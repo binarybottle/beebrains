@@ -44,7 +44,7 @@ num_runs = 10
 # table name:
 # subject = 'bk120309e.lst'  
 # conditions -- the bee woke up or an odor concentration was introduced:
-contrasts = ['awake', 'odor','odor','odor','odor','odor','odor','odor','odor']  
+conditions = ['awake', 'odor','odor','odor','odor','odor','odor','odor','odor']  
 # when these conditions began, by frame number in concatenated sequence:
 onsets = [1160, 233,465,697,929,1393,1625,1857,2089]
 # durations of each condition:
@@ -77,7 +77,7 @@ preprocessed_volume = os.path.join(out_path, subject+'_smoothed.nii.gz')
 nframes = frames_per_run * num_runs
 frametimes = np.linspace(0,nframes-1,nframes)
 
-paradigm = BlockParadigm(con_id=contrasts, onset=onsets, duration=durations, amplitude=amplitudes)
+paradigm = BlockParadigm(con_id=conditions, onset=onsets, duration=durations, amplitude=amplitudes)
 
 dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR', drift_model='Blank', hfcut=np.inf)
 X = dmtx.matrix
