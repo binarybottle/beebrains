@@ -41,10 +41,15 @@ ydim = 172  # y dimension for each image
 frames_per_run = 232  # number of images captured for each run
 num_runs = 10
 
-frametimes = np.linspace(0,2319,2320)
-contrasts = ['awake', 'odor','odor','odor','odor','odor','odor','odor','odor']
+# table name:
+# subject = 'bk120309e.lst'  
+# conditions -- the bee woke up or an odor concentration was introduced:
+contrasts = ['awake', 'odor','odor','odor','odor','odor','odor','odor','odor']  
+# when these conditions began, by frame number in concatenated sequence:
 onsets = [1160, 233,465,697,929,1393,1625,1857,2089]
+# durations of each condition:
 durations = [1160, 232,232,232,232,232,232,232,232]
+# the amplitude for each condition (awake = 1; concentration < 1):
 amplitudes = [1, 0.6,0.4,0.3,0.2,0.6,0.4,0.3,0.2]
 
 stack_slices = 1
@@ -69,6 +74,9 @@ preprocessed_volume = os.path.join(out_path, subject+'_smoothed.nii.gz')
 # Construct a design matrix
 ########################################
 
+nframes = frames_per_run * num_runs
+frametimes = np.linspace(0,nframes-1,nframes)
+
 paradigm = BlockParadigm(con_id=contrasts, onset=onsets, duration=durations, amplitude=amplitudes)
 
 dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR', drift_model='Blank', hfcut=np.inf)
@@ -87,7 +95,6 @@ if plot_design_matrix:
 # Apply a GLM to all voxels
 ########################################
 
-nframes = frames_per_run * num_runs
 shape = (xdim,ydim,nframes)
 affine = np.eye(4)
 
