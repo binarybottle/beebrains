@@ -124,7 +124,7 @@ glm.fit(Y.T, X, method=method, model=model)
 # Specify the contrast [1 -1 0 ..]
 contrast = np.zeros(X.shape[1])
 contrast[0] = 1
-contrast[1] = -1
+#contrast[1] = 0
 #contrast[2] = 0
 my_contrast = glm.contrast(contrast)
 
