@@ -11,7 +11,7 @@ Outputs:
 
 Command: python <this file name> <subject string> <data directory>
 
-Example: python process_beebrains.py bk120309e.lst data output
+Example: python process_beebrains.py bk120309e.lst output
 
 Requirements:  
 * Python libraries:  numpy, nipy, nibabel
@@ -87,9 +87,9 @@ if plot_design_matrix:
     fig1 = mp.figure(figsize=(10, 6))
     dmtx.show()
     mp.title('Block design matrix for ' + subject)
-    mp.show()
     fig1_file = os.path.join(out_path, subject + '_design_matrix.png')
     mp.savefig(fig1_file)
+    #mp.show()
 
 ########################################
 # Apply a GLM to all voxels
@@ -142,16 +142,16 @@ if plot_histogram:
     fig2 = mp.figure()
     mp.plot(c[: - 1], h)
     mp.title('Histogram of the z-values for ' + subject)
-    mp.show()
     fig2_file = os.path.join(out_path, subject + '_histogram.png')
     mp.savefig(fig2_file)
+    #mp.show()
 
 # Plot contrast image
 if plot_contrast:
     fig3 = mp.figure()
     mp.matshow(zvals)
     mp.title('Contrast image for ' + subject)
-    mp.show()
     fig3_file = os.path.join(out_path, subject + '_contrast.png')
     mp.savefig(fig3_file)
+    #mp.show()
 
