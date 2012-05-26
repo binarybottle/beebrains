@@ -39,7 +39,10 @@ import nibabel as nib
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 
-ANTS = '/software/ANTS_1.9/bin/'  # for registration (motion correction)
+#ANTS = '/software/ANTS_1.9/bin/'  # for registration (motion correction)
+#IMAGEMAGICK = '/usr/local/bin/'  # only if converting images and creating montage movies
+#ANTS = '/software/ANTS/bin/'  # for registration (motion correction)
+ANTS = '/usr/local/bin/'  # for registration (motion correction)
 IMAGEMAGICK = '/usr/local/bin/'  # only if converting images and creating montage movies
 
 # Settings
@@ -48,7 +51,7 @@ ydim = 172  # y dimension for each image
 frames_per_run = 232  # number of images captured for each run
 
 # Steps to run:
-convert_images = 1  # convert .pst images to nifti file format
+convert_images = 0  # convert .pst images to nifti file format
 correct_motion = 1  # apply registration to correct for motion
 smooth_images = 1  # smooth the resulting motion-corrected images
 
@@ -66,7 +69,7 @@ wavelengths = ['340nm','380nm']  # lambda 1 and 2 strings
 # Save image types:
 save_affine = 0  #  Save affine transform -- NOTE: Using average of affine transforms instead
 save_nonlinear = 0  #  Save nonlinear transform -- NOTE: Using average of nonlinear transforms instead
-save_affine_avg = 1  # Use average of affine transformsinstead
+save_affine_avg = 1  # Use average of affine transforms instead
 save_nonlinear_avg = 1  # Use average of nonlinear transforms instead
 save_montages = 0  # Save for visualizing results:
 save_movie = 0  # Very memory intensive -- better to use another program such as GraphicConverter

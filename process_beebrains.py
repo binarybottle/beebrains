@@ -61,7 +61,7 @@ plot_contrast = 1
 args = sys.argv[1:]
 if len(args)<2:
     print("\n\t Please provide a subject string and the name of the data/output directory.")
-    print("\t Example: python " + sys.argv[0] + " bk120309e.lst subject data output")
+    print("\t Example: python " + sys.argv[0] + " bk120309e.lst bk120309e.lst output")
     sys.exit()
 else:
     subject = str(args[0]) # 'bk120309e.lst'
