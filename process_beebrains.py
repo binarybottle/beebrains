@@ -52,23 +52,25 @@ durations = [1160, 232,232,232,232,232,232,232,232]
 # the amplitude for each condition (awake = 1; concentration < 1):
 amplitudes = [1, 0.6,0.4,0.3,0.2,0.6,0.4,0.3,0.2]
 
-stack_slices = 1
-plot_design_matrix = 1
-plot_histogram = 1
-plot_contrast = 1
+stack_slices = 0
+plot_design_matrix = 0
+plot_histogram = 0
+plot_contrast = 0
+
+smooth_sigma = 1
 
 # Command-line arguments
 args = sys.argv[1:]
 if len(args)<2:
     print("\n\t Please provide a subject string and the name of the data/output directory.")
-    print("\t Example: python " + sys.argv[0] + " bk120309e.lst subject data output")
+    print("\t Example: python " + sys.argv[0] + " bk120309e.lst output")
     sys.exit()
 else:
     subject = str(args[0]) # 'bk120309e.lst'
     out_path = str(args[1])
 
-preprocessed_path = os.path.join(out_path, subject+'_smoothed/')
-preprocessed_volume = os.path.join(out_path, subject+'_smoothed.nii.gz')
+preprocessed_path = os.path.join(out_path, subject+'_smoothed' + str(smooth_sigma) +'/')
+preprocessed_volume = os.path.join(out_path, subject+'_smoothed' + str(smooth_sigma) + '.nii.gz')
 
 ########################################
 # Construct a design matrix
@@ -95,16 +97,17 @@ if plot_design_matrix:
 # Apply a GLM to all voxels
 ########################################
 
-shape = (xdim,ydim,nframes)
+shape = (xdim,ydim,1,nframes)
 affine = np.eye(4)
 
 # Load data
 if stack_slices:
     Y = np.zeros(shape)
     for i in range(1,nframes+1):       
-        img = nib.load(os.path.join(preprocessed_path, 'image'+str(i)+'_AvgWarped_ratio_smooth.nii.gz'))
+        img = nib.load(os.path.join(preprocessed_path, 
+                       'image'+str(i)+'_AvgWarped_ratio_smooth.nii.gz'))
         slice = img.get_data()
-        Y[:,:,i-1] = slice
+        Y[:,:,0,i-1] = slice
     img = nib.Nifti1Image(Y, affine)
     nib.save(img, preprocessed_volume)
 else:
@@ -125,15 +128,15 @@ glm.fit(Y.T, X, method=method, model=model)
 contrast = np.zeros(X.shape[1])
 contrast[0] = 1
 #contrast[1] = 0
-#contrast[2] = 0
+#contrast[2] = -1
 my_contrast = glm.contrast(contrast)
 
 # Compute the contrast image
 zvals = my_contrast.zscore()
-contrast_image = nib.Nifti1Image(zvals, affine)
+contrast_image = nib.Nifti1Image(zvals.T, affine)
 
 # Save the contrast as an image
-contrast_file = os.path.join(out_path, subject+'_zmap.nii.gz')
+contrast_file = os.path.join(out_path, subject+'_zmap_smooth' + str(smooth_sigma) + '.nii.gz')
 nib.save(contrast_image, contrast_file)
 
 # Plot histogram
@@ -142,7 +145,7 @@ if plot_histogram:
     fig2 = mp.figure()
     mp.plot(c[: - 1], h)
     mp.title('Histogram of the z-values for ' + subject)
-    fig2_file = os.path.join(out_path, subject + '_histogram.png')
+    fig2_file = os.path.join(out_path, subject + '_histogram_sigma' + str(smooth_sigma) + '.png')
     mp.savefig(fig2_file)
     #mp.show()
 
@@ -151,7 +154,7 @@ if plot_contrast:
     fig3 = mp.figure()
     mp.matshow(zvals)
     mp.title('Contrast image for ' + subject)
-    fig3_file = os.path.join(out_path, subject + '_contrast.png')
+    fig3_file = os.path.join(out_path, subject + '_contrast_sigma' + str(smooth_sigma) + '.png')
     mp.savefig(fig3_file)
     #mp.show()
 

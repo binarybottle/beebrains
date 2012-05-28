@@ -39,7 +39,10 @@ import nibabel as nib
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 
-ANTS = '/software/ANTS_1.9/bin/'  # for registration (motion correction)
+#ANTS = '/software/ANTS_1.9/bin/'  # for registration (motion correction)
+#IMAGEMAGICK = '/usr/local/bin/'  # only if converting images and creating montage movies
+#ANTS = '/software/ANTS/bin/'  # for registration (motion correction)
+ANTS = '/usr/local/bin/'  # for registration (motion correction)
 IMAGEMAGICK = '/usr/local/bin/'  # only if converting images and creating montage movies
 
 # Settings
@@ -48,9 +51,12 @@ ydim = 172  # y dimension for each image
 frames_per_run = 232  # number of images captured for each run
 
 # Steps to run:
-convert_images = 1  # convert .pst images to nifti file format
-correct_motion = 1  # apply registration to correct for motion
-smooth_images = 1  # smooth the resulting motion-corrected images
+convert_images = 0  # convert .pst images to nifti file format
+correct_motion = 0  # apply registration to correct for motion
+smooth_images = 0  # smooth the resulting motion-corrected images
+
+if smooth_images:
+    smooth_sigma = 1
 
 # Table parameters:
 include_string = '2'  # indicator in table which rows are to be processed
@@ -66,7 +72,7 @@ wavelengths = ['340nm','380nm']  # lambda 1 and 2 strings
 # Save image types:
 save_affine = 0  #  Save affine transform -- NOTE: Using average of affine transforms instead
 save_nonlinear = 0  #  Save nonlinear transform -- NOTE: Using average of nonlinear transforms instead
-save_affine_avg = 1  # Use average of affine transformsinstead
+save_affine_avg = 1  # Use average of affine transforms instead
 save_nonlinear_avg = 1  # Use average of nonlinear transforms instead
 save_montages = 0  # Save for visualizing results:
 save_movie = 0  # Very memory intensive -- better to use another program such as GraphicConverter
@@ -78,11 +84,11 @@ def convert2png(stem):
     cmd = [IMAGEMAGICK+'convert', stem + '.jpg', stem + '.png']
     print(' '.join(cmd)); os.system(' '.join(cmd))                
 
-def smooth3(image_in,image_out):
+def smooth2d(image_in, image_out, smooth_sigma=smooth_sigma):
     '''Smooth each image with a Gaussian filter, sigma=3'''
     image_nib = nib.load(image_in)
     image = image_nib.get_data()
-    image_smooth = gaussian_filter(image, sigma=3, order=0)
+    image_smooth = gaussian_filter(image, sigma=smooth_sigma, order=0)
     image_smooth_nib = nib.Nifti1Image(image_smooth, np.eye(4))
     image_smooth_nib.to_filename(image_out)
 
@@ -116,7 +122,7 @@ for itable_file in table_files:
         output_path_images = output_stem + '_images'
         output_path_transforms = output_stem + '_transforms'
         output_path_transformed = output_stem + '_transformed'
-        output_path_smoothed = output_stem + '_smoothed'
+        output_path_smoothed = output_stem + '_smoothed' + str(smooth_sigma)
         output_path_montages = output_stem + '_montages'
 
         # Load table and  how many rows are to be included (analysis = 2)
@@ -192,7 +198,7 @@ for itable_file in table_files:
                         cmd = [ANTS+'ANTS 2 -m CC[',image_ref+',',image_lambda+',1,2] -o',xfm,
                                '-r Gauss[2,0] -t SyN[0.5] -i 30x99x11 --use-Histogram-Matching',
                                '--number-of-affine-iterations 10000x10000x10000x10000x10000']
-                        print(' '.join(cmd)); os.system(' '.join(cmd))
+#                        print(' '.join(cmd)); os.system(' '.join(cmd))
 
                         if save_affine:
                             cmd = [ANTS+'WarpImageMultiTransform 2', image_lambda, transformed_stem + w + '_Affined.nii.gz',
@@ -202,7 +208,7 @@ for itable_file in table_files:
                         if save_nonlinear:
                             cmd = [ANTS+'WarpImageMultiTransform 2', image_lambda, transformed_stem + w + '_Warped.nii.gz',
                                    '-R', image_ref, transform_stem + w + '_Warp.nii.gz', transform_stem + w + '_Affine.txt']
-                            print(' '.join(cmd)); os.system(' '.join(cmd))
+#                            print(' '.join(cmd)); os.system(' '.join(cmd))
 
                 if save_affine:
                     # Divide the first affine motion-corrected image by the second
@@ -250,7 +256,7 @@ for itable_file in table_files:
                 if save_nonlinear_avg:
                     cmd = [ANTS+'AverageImages 2', transform_stem + '_AvgWarp.nii.gz', '0',
                                                    transform_stem + '_*_Warp.nii.gz']
-                    print(' '.join(cmd)); os.system(' '.join(cmd))
+#                    print(' '.join(cmd)); os.system(' '.join(cmd))
 
                     for ilambda in range(len(lambda_columns)):
                         w = '_' + wavelengths[ilambda]
@@ -278,13 +284,21 @@ for itable_file in table_files:
                 transformed_stem = os.path.join(output_path_transformed, 'image' + str(iframe+1))
                 smoothed_stem = os.path.join(output_path_smoothed, 'image' + str(iframe+1))
                 #if save_affine:
-                #    smooth3(transformed_stem + '_Affined_ratio.nii.gz',transformed_stem + '_Affined_ratio_smooth.nii.gz')
+                #    smooth2d(transformed_stem + '_Affined_ratio.nii.gz',
+                #             transformed_stem + '_Affined_ratio_smooth.nii.gz',
+                #             smooth_sigma = smooth_sigma)
                 #if save_affine_avg:
-                #    smooth3(transformed_stem + '_AvgAffined_ratio.nii.gz',transformed_stem + '_AvgAffined_ratio_smooth.nii.gz')
+                #    smooth2d(transformed_stem + '_AvgAffined_ratio.nii.gz',
+                #             transformed_stem + '_AvgAffined_ratio_smooth.nii.gz',
+                #             smooth_sigma = smooth_sigma)
                 #if save_nonlinear:
-                #    smooth3(transformed_stem + '_Warped_ratio.nii.gz',transformed_stem + '_Warped_ratio_smooth.nii.gz')
+                #    smooth2d(transformed_stem + '_Warped_ratio.nii.gz',
+                #             transformed_stem + '_Warped_ratio_smooth.nii.gz',
+                #             smooth_sigma = smooth_sigma)
                 if save_nonlinear_avg:
-                    smooth3(transformed_stem + '_AvgWarped_ratio.nii.gz',smoothed_stem + '_AvgWarped_ratio_smooth.nii.gz')
+                    smooth2d(transformed_stem + '_AvgWarped_ratio.nii.gz',
+                             smoothed_stem + '_AvgWarped_ratio_smooth.nii.gz',
+                             smooth_sigma = smooth_sigma)
 
 
         # Convert each nifti image file to jpg and to png and save a montage of preprocessed images
