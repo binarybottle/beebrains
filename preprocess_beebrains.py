@@ -52,6 +52,7 @@ frames_per_run = 232  # number of images captured for each run
 
 # Steps to run:
 convert_images = 0  # convert .pst images to nifti file format
+<<<<<<< HEAD
 correct_motion = 0  # apply registration to correct for motion
 smooth_images = 0  # smooth the resulting motion-corrected images
 
@@ -198,7 +199,7 @@ for itable_file in table_files:
                         cmd = [ANTS+'ANTS 2 -m CC[',image_ref+',',image_lambda+',1,2] -o',xfm,
                                '-r Gauss[2,0] -t SyN[0.5] -i 30x99x11 --use-Histogram-Matching',
                                '--number-of-affine-iterations 10000x10000x10000x10000x10000']
-#                        print(' '.join(cmd)); os.system(' '.join(cmd))
+                        print(' '.join(cmd)); os.system(' '.join(cmd))
 
                         if save_affine:
                             cmd = [ANTS+'WarpImageMultiTransform 2', image_lambda, transformed_stem + w + '_Affined.nii.gz',
@@ -208,7 +209,7 @@ for itable_file in table_files:
                         if save_nonlinear:
                             cmd = [ANTS+'WarpImageMultiTransform 2', image_lambda, transformed_stem + w + '_Warped.nii.gz',
                                    '-R', image_ref, transform_stem + w + '_Warp.nii.gz', transform_stem + w + '_Affine.txt']
-#                            print(' '.join(cmd)); os.system(' '.join(cmd))
+                            print(' '.join(cmd)); os.system(' '.join(cmd))
 
                 if save_affine:
                     # Divide the first affine motion-corrected image by the second
@@ -256,7 +257,7 @@ for itable_file in table_files:
                 if save_nonlinear_avg:
                     cmd = [ANTS+'AverageImages 2', transform_stem + '_AvgWarp.nii.gz', '0',
                                                    transform_stem + '_*_Warp.nii.gz']
-#                    print(' '.join(cmd)); os.system(' '.join(cmd))
+                    print(' '.join(cmd)); os.system(' '.join(cmd))
 
                     for ilambda in range(len(lambda_columns)):
                         w = '_' + wavelengths[ilambda]
