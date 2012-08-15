@@ -32,32 +32,7 @@ from nipy.modalities.fmri.design_matrix import make_dmtx
 from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
 import nipy.labs.glm as GLM
 
-########################################
-# Settings
-########################################
-
-xdim = 130  # x dimension for each image
-ydim = 172  # y dimension for each image
-frames_per_run = 232  # number of images captured for each run
-num_runs = 10
-
-# table name:
-# subject = 'bk120309e.lst'  
-# conditions -- the bee woke up or an odor concentration was introduced:
-conditions = ['awake', 'odor','odor','odor','odor','odor','odor','odor','odor']  
-# when these conditions began, by frame number in concatenated sequence:
-onsets = [1160, 233,465,697,929,1393,1625,1857,2089]
-# durations of each condition:
-durations = [1160, 232,232,232,232,232,232,232,232]
-# the amplitude for each condition (awake = 1; concentration < 1):
-amplitudes = [1, 0.6,0.4,0.3,0.2,0.6,0.4,0.3,0.2]
-
-stack_slices = 0
-plot_design_matrix = 0
-plot_histogram = 0
-plot_contrast = 0
-
-smooth_sigma = 1
+from settings import *
 
 # Command-line arguments
 args = sys.argv[1:]
@@ -76,8 +51,8 @@ preprocessed_volume = os.path.join(out_path, subject+'_smoothed' + str(smooth_si
 # Construct a design matrix
 ########################################
 
-nframes = frames_per_run * num_runs
-frametimes = np.linspace(0,nframes-1,nframes)
+n_images = pickle.load(os.path.join(out_path, 'n_images.pkl'))
+frametimes = np.linspace(0, n_images-1, n_images)
 
 paradigm = BlockParadigm(con_id=conditions, onset=onsets, duration=durations, amplitude=amplitudes)
 
@@ -97,13 +72,13 @@ if plot_design_matrix:
 # Apply a GLM to all voxels
 ########################################
 
-shape = (xdim,ydim,1,nframes)
+shape = (xdim,ydim,1,n_images)
 affine = np.eye(4)
 
 # Load data
 if stack_slices:
     Y = np.zeros(shape)
-    for i in range(1,nframes+1):       
+    for i in range(1,n_images+1):       
         img = nib.load(os.path.join(preprocessed_path, 
                        'image'+str(i)+'_AvgWarped_ratio_smooth.nii.gz'))
         slice = img.get_data()
