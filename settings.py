@@ -33,9 +33,9 @@ ref_image = 1
 ext = '.nii.gz'
 
 # Steps to run:
-convert_images = 0  # convert .pst image slice stack to 2D nifti files
+convert_images = 1  # convert .pst image slice stack to 2D nifti files
 correct_motion = 1  # apply registration to correct for motion
-smooth_images = 0  # smooth the resulting motion-corrected images
+smooth_images = 1  # smooth the resulting motion-corrected images
 stack_slices = 0
 plot_design_matrix = 0
 plot_histogram = 0
@@ -53,9 +53,7 @@ start2_column = 8
 stop2_column = 9
 
 # Save image types:
-save_affine = 0  #  Save affine transform -- NOTE: Using average of affine transforms instead
-save_nonlinear = 0  #  Save nonlinear transform -- NOTE: Using average of nonlinear transforms instead
 save_affine_avg = 1  # Use average of affine transforms
 save_nonlinear_avg = 1  # Use average of nonlinear transforms
-save_montages = 0  # Save for visualizing results
+save_montages = 1  # Save for visualizing results
 save_movie = 0  # Very memory intensive -- better to use another program such as GraphicConverter

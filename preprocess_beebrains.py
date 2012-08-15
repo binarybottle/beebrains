@@ -74,7 +74,7 @@ w2 = wavelengths[1]
 args = sys.argv[1:]
 if len(args)<3:
     print("\n\t Please provide the names of two directories: one containing .lst table files, another to save output.")
-    print("\t Example: python " + sys.argv[0] + " data/lr1203131.txt data/lr1203131.pst output")
+    print("\t Example: python " + sys.argv[0] + " data/Bee1_lr1203131.txt data/Bee1_lr1203131.pst output")
     sys.exit()
 else:
     table_file = str(args[0])
