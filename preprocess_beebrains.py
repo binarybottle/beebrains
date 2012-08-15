@@ -13,7 +13,7 @@ Preprocessing steps:
     apply their affine and nonlinear transforms.
     Also compose the average of their affine and nonlinear transforms
     and apply them to both images.
-(5) Divide each motion-corrected image corresponding to one 
+(5) Divide each motion-corrected image corresponding to one
     wavelength by the motion-corrected image of a second wavelength.
 (6) Smooth each ratio image (from 5) with a Gaussian kernel.
 
@@ -25,7 +25,7 @@ python <this file> <table file> <image directory> <output directory>
 Example:
 python preprocess_beebrains.py data/Bee1_lr120313l.txt data/Bee1_lr120313l.pst output
 
-Requirements:  
+Requirements:
 * Python libraries:  nibabel, numpy, scipy
 * ANTS registration software for motion correction
 * ImageMagick -- only if creating montages/movies
@@ -48,9 +48,9 @@ from settings import *
 def convert2png(stem):
     '''Convert nifti file to jpeg and png'''
     cmd = [ANTS+'ConvertToJpg', stem + ext, stem + '.jpg']
-    print(' '.join(cmd)); os.system(' '.join(cmd))                
+    print(' '.join(cmd)); os.system(' '.join(cmd))
     cmd = [IMAGEMAGICK+'convert', stem + '.jpg', stem + '.png']
-    print(' '.join(cmd)); os.system(' '.join(cmd))                
+    print(' '.join(cmd)); os.system(' '.join(cmd))
 
 def smooth2d(image_in, image_out, smooth_sigma=smooth_sigma):
     '''Smooth each image with a Gaussian filter, sigma=3'''
@@ -137,7 +137,6 @@ if convert_images:
                 img_ratio_nib = nib.Nifti1Image(image_matrix, np.eye(4))
                 img_ratio_nib.to_filename(os.path.join(out_path_images, converted_file))
 
-    n_runs /= 2
     f = open(os.path.join(out_path, 'n_runs.pkl'), 'w')
     pickle.dump(n_runs, f)
 
