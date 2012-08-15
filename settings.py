@@ -33,7 +33,7 @@ ref_image = 1
 ext = '.nii.gz'
 
 # Steps to run:
-convert_images = 1  # convert .pst image slice stack to 2D nifti files
+convert_images = 0  # convert .pst image slice stack to 2D nifti files
 correct_motion = 1  # apply registration to correct for motion
 smooth_images = 0  # smooth the resulting motion-corrected images
 stack_slices = 0

@@ -149,7 +149,8 @@ if convert_images:
 #              -R target.nii transformWarp.nii.gz transformAffine.txt
 if correct_motion:
     if not convert_images:
-        n_runs = pickle.load(os.path.join(out_path, 'n_runs.pkl'))
+        f = open(os.path.join(out_path, 'n_runs.pkl'), 'r')
+        n_runs = pickle.load(f)
     print('Correcting motion...')
     try_mkdir(out_path_transforms)
     try_mkdir(out_path_transformed)
@@ -167,14 +168,13 @@ if correct_motion:
 
             compute_transform = 1
             if compute_transform:
-                for ilambda in range(wavelengths):
+                for ilambda in range(len(wavelengths)):
                     w = '_' + wavelengths[ilambda]
                     image_ref = image_ref_stem + w + ext
                     image_lambda = image_stem + w + ext
                     xfm = transform_stem + w + '_' + ext
 
-                    cmd = [ANTS+'ANTS 2 -m CC[',image_ref+',',image_lambda+',1,2] -o',
-                           transform_file,
+                    cmd = [ANTS+'ANTS 2 -m CC[',image_ref+',',image_lambda+',1,2] -o',xfm,
                            '-r Gauss[2,0] -t SyN[0.5] -i 30x99x11 --use-Histogram-Matching',
                            '--number-of-affine-iterations 10000x10000x10000x10000x10000']
                     print(' '.join(cmd)); os.system(' '.join(cmd))
@@ -188,7 +188,7 @@ if correct_motion:
                        transform_stem + '_' + w2 + '_Affine.txt']
                 print(' '.join(cmd)); os.system(' '.join(cmd))
             if save_affine_avg:
-                for ilambda in range(wavelengths):
+                for ilambda in range(len(wavelengths)):
                     w = '_' + wavelengths[ilambda]
                     cmd = [ANTS+'WarpImageMultiTransform 2',
                            image_stem + w + ext,
@@ -211,7 +211,7 @@ if correct_motion:
                                                transform_stem + '_*_Warp' + ext]
                 print(' '.join(cmd)); os.system(' '.join(cmd))
 
-                for ilambda in range(wavelengths):
+                for ilambda in range(len(wavelengths)):
                     w = '_' + wavelengths[ilambda]
                     cmd = [ANTS+'WarpImageMultiTransform 2',
                            image_stem + w + ext,
@@ -231,6 +231,9 @@ if correct_motion:
 # Smooth each motion-corrected image file.
 if smooth_images:
     try_mkdir(out_path_smoothed)
+    if not convert_images:
+        f = open(os.path.join(out_path, 'n_runs.pkl'), 'r')
+        n_runs = pickle.load(f)
     for irun in range(n_runs):
         for iframe in range(images_per_run):
             print('Smoothing image ' + str(iframe + 1) + ' from run ' + str(irun + 1))
@@ -247,6 +250,9 @@ if smooth_images:
 # Convert each nifti image file to jpg and to png and save a montage of preprocessed images
 if save_montages:
     try_mkdir(out_path_montages)
+    if not convert_images:
+        f = open(os.path.join(out_path, 'n_runs.pkl'), 'r')
+        n_runs = pickle.load(f)
     for irun in range(n_runs):
         for iframe in range(images_per_run):
             stem = 'run' + str(irun + 1) + '_' + \
