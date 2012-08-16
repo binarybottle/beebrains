@@ -19,24 +19,29 @@ import os
 #-------------------------------------
 # Settings for preprocess_beebrains.py
 #-------------------------------------
-
 ANTS = os.environ['ANTSPATH']  # for registration (motion correction)
 IMAGEMAGICK = '/usr/local/bin/'  # only if converting images and creating montage movies
 
 # Settings
 xdim = 130  # x dimension for each image
 ydim = 172  # y dimension for each image
+n_runs = 10
 images_per_run = 232
 wavelengths = ['340', '380']
 smooth_sigma = 1
 ref_image = 1
 ext = '.nii.gz'
+n_images = n_runs * images_per_run
 
-# Steps to run:
-convert_images = 1  # convert .pst image slice stack to 2D nifti files
-correct_motion = 1  # apply registration to correct for motion
-smooth_images = 1  # smooth the resulting motion-corrected images
-stack_slices = 0
+# Run preprocessing steps (1=True, 0=False)
+preprocess_images = 1
+convert_images = 0  # convert .pst image slice stack to 2D nifti files
+correct_motion = 0  # apply registration to correct for motion
+smooth_images = 0  # smooth the resulting motion-corrected images
+stack_slices = 1
+
+# Run processing steps (1=True, 0=False)
+analyze_images = 0
 plot_design_matrix = 0
 plot_histogram = 0
 plot_contrast = 0
