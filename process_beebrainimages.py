@@ -84,14 +84,16 @@ else:
 # Functions
 #-----------------------------------------------------------------------------
 def convert2png(stem):
-    """Convert nifti file to jpeg and png"""
+    """Convert nifti file to jpeg and png
+    """
     cmd = [ANTS+'ConvertToJpg', stem + ext, stem + '.jpg']
     print(' '.join(cmd)); os.system(' '.join(cmd))
     cmd = [IMAGEMAGICK+'convert', stem + '.jpg', stem + '.png']
     print(' '.join(cmd)); os.system(' '.join(cmd))
 
 def smooth2d(image_in, image_out, smooth_sigma=smooth_sigma):
-    """Smooth each image with a Gaussian filter"""
+    """Smooth each image with a Gaussian filter
+    """
     image_nib = nib.load(image_in)
     image = image_nib.get_data()
     image_smooth = gaussian_filter(image, sigma=smooth_sigma, order=0)
@@ -105,15 +107,25 @@ def try_mkdir(dir_name):
     except IOError:
         print("Cannot make " + dir_name + " directory.")
 
+def norm_amplitudes(amplitudes):
+    """Make the amplitude values span interval [0,1] better
+    """
+    # norm_amps = 1 + 0.1 * (np.log10(np.array(amplitudes)))
+    # return [max([x, 0]) for x in norm_amps]
+    amplitudes = np.array(amplitudes)
+    return amplitudes / max(amplitudes)
+
 #=============================================================================
 # Read table and construct lists of values and names for output folders
+# ----------------------------------------------------------------------------
+# Skip rows (starting from start_row) and build lists
+# NOTE: Double some fields because of onsets and durations for two wavelengths
 #=============================================================================
 try:
     csv_reader = csv.reader(open(table_file, 'rU'), dialect=csv.excel_tab)
 except IOError:
     print("Cannot open " + table_file + ".")
 
-# Loop through rows (starting from start_row) and build lists
 conditions = []
 amplitudes = []
 onsets = []
@@ -125,16 +137,23 @@ for irow, row in enumerate(csv_reader):
         n_rows += 1
         if np.mod(n_rows, 2):
             n_runs += 1
-        if row[behavior_column] == "wake":
-            conditions.append(1)
-        elif row[behavior_column] == "sleep":
-            conditions.append(0)
-        amplitudes.append(np.float(row[amplitude_column]))
-        onsets.append(int(row[start1_column]))
-        onsets.append(int(row[start2_column]))
-        durations.append(int(row[stop1_column]) - int(row[start1_column]))
-        durations.append(int(row[stop2_column]) - int(row[start2_column]))
+            if row[behavior_column] == "wake":
+                conditions.append(1)
+                conditions.append(1)
+            elif row[behavior_column] == "sleep":
+                conditions.append(0)
+                conditions.append(0)
+            amplitudes.append(np.float(row[amplitude_column]))
+            amplitudes.append(np.float(row[amplitude_column]))
+            offset = (n_runs - 1) * images_per_run
+            onsets.append(offset + int(row[start1_column]))
+            onsets.append(offset + int(row[start2_column]))
+            durations.append(int(row[stop1_column]) - int(row[start1_column]))
+            durations.append(int(row[stop2_column]) - int(row[start2_column]))
 n_images = n_runs * images_per_run
+
+# Normalize amplitudes
+amplitudes = norm_amplitudes(amplitudes)
 
 # Output directory names
 in_stem = os.path.splitext(os.path.basename(table_file))[0]
@@ -398,7 +417,7 @@ if preprocess_images:
 #  conditions, onsets, durations, amplitudes)
 #=============================================================================
 if analyze_images:
-    if not preprocess_images and not stack_slices:
+    if not preprocess_images:
         img = nib.load(image_stack_file)
         image_stack = img.get_data()
 
@@ -406,7 +425,10 @@ if analyze_images:
     # Construct a design matrix
     #-------------------------------------------------------------------------
     frametimes = np.linspace(0, n_images-1, n_images)
-
+    print('Conditions:\n{}'.format(conditions))
+    print('Amplitudes:\n{}'.format(amplitudes))
+    print('Onsets:\n{}'.format(onsets))
+    print('Durations:\n{}'.format(durations))
     paradigm = BlockParadigm(con_id=conditions, onset=onsets,
                              duration=durations, amplitude=amplitudes)
 
