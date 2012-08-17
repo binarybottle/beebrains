@@ -36,7 +36,8 @@ Requirements:
 * ANTS registration software for motion correction
 * ImageMagick -- only if creating montages/movies
 
-With help from Satrajit S. Ghosh and after Bertrand Thirion's examples:
+fMRI-based analysis with much-appreciated help from Satrajit S. Ghosh
+and after Bertrand Thirion's examples:
 https://github.com/nipy/nipy/blob/master/examples/labs/demo_dmtx.py
 https://github.com/nipy/nipy/blob/master/examples/labs/example_glm.py
 
@@ -49,7 +50,6 @@ https://github.com/nipy/nipy/blob/master/examples/labs/example_glm.py
 #-----------------------------------------------------------------------------
 import os, sys
 import csv
-import cPickle as pickle
 import nibabel as nib
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
@@ -119,19 +119,17 @@ conditions = []
 amplitudes = []
 onsets = []
 durations = []
-n_rows = 0
-n_runs = 0
 for irow, row in enumerate(csv_reader):
     if irow >= start_row:
         if row[behavior_column] == "wake":
             conditions.append(1)
         elif row[behavior_column] == "sleep":
             conditions.append(0)
-        amplitudes.append(row[amplitude_column])
-        onsets.append(row[start1_column])
-        onsets.append(row[start2_column])
-        durations.append(row[stop1_column] - row[start1_column])
-        durations.append(row[stop2_column] - row[start2_column])
+        amplitudes.append(np.float(row[amplitude_column]))
+        onsets.append(int(row[start1_column]))
+        onsets.append(int(row[start2_column]))
+        durations.append(int(row[stop1_column]) - int(row[start1_column]))
+        durations.append(int(row[stop2_column]) - int(row[start2_column]))
 
 # Output directory names
 in_stem = os.path.splitext(os.path.basename(table_file))[0]
@@ -142,8 +140,10 @@ out_path_transformed = os.path.join(out_path, 'transformed')
 out_path_smoothed = os.path.join(out_path, 'smoothed' + str(smooth_sigma))
 out_path_montages = os.path.join(out_path, 'montages')
 image_stack_file = os.path.join(out_path, 'preprocessed_slicestack' + ext)
-affine = np.eye(4)
 try_mkdir(out_path)
+
+affine = np.eye(4)
+n_images = n_runs * images_per_run
 
 #=============================================================================
 # Preprocess (coregister, smooth) images
@@ -177,7 +177,6 @@ if preprocess_images:
                     n_runs += 1
 
                 # Load .pst file
-                #print(' '.join(row))
                 file = os.path.join(images_dir, row[image_file_column])
                 wavelength = row[wavelength_column]
                 print('Loading ' + file + ' and converting images...')
@@ -205,9 +204,6 @@ if preprocess_images:
     #              -R target.nii transformWarp.nii.gz transformAffine.txt
     #-------------------------------------------------------------------------
     if correct_motion:
-        if not convert_images:
-            f = open(os.path.join(out_path, 'n_runs.pkl'), 'r')
-            n_runs = pickle.load(f)
         print('Correcting motion...')
         try_mkdir(out_path_transforms)
         try_mkdir(out_path_transformed)
@@ -223,79 +219,87 @@ if preprocess_images:
                 transform_stem = os.path.join(out_path_transforms, stem)
                 transformed_stem = os.path.join(out_path_transformed, stem)
 
-                compute_transform = 1
-                if compute_transform:
+                # Only run if output doesn't already exist
+                if not os.path.exists(transformed_stem + '_AvgWarped_ratio' + ext):
                     for ilambda in range(len(wavelengths)):
                         w = '_' + wavelengths[ilambda]
                         image_ref = image_ref_stem + w + ext
                         image_lambda = image_stem + w + ext
                         xfm = transform_stem + w + '_' + ext
+                        affine_iterations = '10000x10000x10000x10000x10000'
+                        nonlin_iterations = '30x99x11'
+                        cmd = [ANTS+'ANTS 2 -m CC[', image_ref + ',' ,
+                               image_lambda + ',1,2] -o', xfm,
+                               '-r Gauss[2,0] -t SyN[0.5] -i',
+                               nonlin_iterations,
+                               '--number-of-affine-iterations',
+                               affine_iterations,
+                               '--use-Histogram-Matching']
+                    print(' '.join(cmd)); os.system(' '.join(cmd))
 
-                        cmd = [ANTS+'ANTS 2 -m CC[',image_ref+',',image_lambda+',1,2] -o',xfm,
-                               '-r Gauss[2,0] -t SyN[0.5] -i 30x99x11 --use-Histogram-Matching',
-                               '--number-of-affine-iterations 10000x10000x10000x10000x10000']
+                    # Compute the average of the two files' affine transforms,
+                    # then apply it to each of two lambda files
+                    if save_affine_avg or save_nonlinear_avg:
+                        cmd = [ANTS+'AverageAffineTransform 2',
+                               transform_stem + '_AvgAffine.txt',
+                               transform_stem + '_' + w1 + '_Affine.txt',
+                               transform_stem + '_' + w2 + '_Affine.txt']
+                        print(' '.join(cmd)); os.system(' '.join(cmd))
+                    if save_affine_avg:
+                        for ilambda in range(len(wavelengths)):
+                            w = '_' + wavelengths[ilambda]
+                            cmd = [ANTS+'WarpImageMultiTransform 2',
+                                   image_stem + w + ext,
+                                   transformed_stem + w + '_AvgAffined' + ext, '-R',
+                                   image_ref_stem + w + ext,
+                                   transform_stem + '_AvgAffine.txt']
+                            print(' '.join(cmd)); os.system(' '.join(cmd))
+
+                        # Divide the two average-affine motion-corrected images
+                        print('Dividing average-affine motion-corrected ' +\
+                              'images for each of two wavelengths...')
+                        cmd = [ANTS+'ImageMath 2',
+                               transformed_stem + '_AvgAffined_ratio' + ext,'/',
+                               transformed_stem + '_' + w1 + '_AvgAffined' + ext,
+                               transformed_stem + '_' + w2 + '_AvgAffined' + ext]
                         print(' '.join(cmd)); os.system(' '.join(cmd))
 
-                # Compute the average of the lambda files' two affine transforms,
-                # then apply it to each of two lambda files
-                if save_affine_avg or save_nonlinear_avg:
-                    cmd = [ANTS+'AverageAffineTransform 2',
-                           transform_stem + '_AvgAffine.txt',
-                           transform_stem + '_' + w1 + '_Affine.txt',
-                           transform_stem + '_' + w2 + '_Affine.txt']
-                    print(' '.join(cmd)); os.system(' '.join(cmd))
-                if save_affine_avg:
-                    for ilambda in range(len(wavelengths)):
-                        w = '_' + wavelengths[ilambda]
-                        cmd = [ANTS+'WarpImageMultiTransform 2',
-                               image_stem + w + ext,
-                               transformed_stem + w + '_AvgAffined' + ext, '-R',
-                               image_ref_stem + w + ext,
-                               transform_stem + '_AvgAffine.txt']
+                    # Compute the average of the two files' nonlinear transforms,
+                    # then apply them to the ratio of the two lambda files
+                    if save_nonlinear_avg:
+                        cmd = [ANTS+'AverageImages 2',
+                               transform_stem + '_AvgWarp' + ext, '0',
+                               transform_stem + '_*_Warp' + ext]
                         print(' '.join(cmd)); os.system(' '.join(cmd))
 
-                    # Divide the first average-affine motion-corrected image by the second
-                    print('Dividing average-affine motion-corrected images for each of two wavelengths...')
-                    cmd = [ANTS+'ImageMath 2',transformed_stem + '_AvgAffined_ratio' + ext,'/',
-                           transformed_stem + '_' + w1 + '_AvgAffined' + ext,
-                           transformed_stem + '_' + w2 + '_AvgAffined' + ext]
-                    print(' '.join(cmd)); os.system(' '.join(cmd))
+                        for ilambda in range(len(wavelengths)):
+                            w = '_' + wavelengths[ilambda]
+                            cmd = [ANTS+'WarpImageMultiTransform 2',
+                                   image_stem + w + ext,
+                                   transformed_stem + w + '_AvgWarped' + ext, '-R',
+                                   image_ref_stem + w + ext,
+                                   transform_stem + '_AvgWarp' + ext,
+                                   transform_stem + '_AvgAffine.txt']
+                            print(' '.join(cmd)); os.system(' '.join(cmd))
 
-                # Compute the average of the lambda files' two nonlinear transforms,
-                # then apply them to the ratio of the two lambda files
-                if save_nonlinear_avg:
-                    cmd = [ANTS+'AverageImages 2', transform_stem + '_AvgWarp' + ext, '0',
-                           transform_stem + '_*_Warp' + ext]
-                    print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                    for ilambda in range(len(wavelengths)):
-                        w = '_' + wavelengths[ilambda]
-                        cmd = [ANTS+'WarpImageMultiTransform 2',
-                               image_stem + w + ext,
-                               transformed_stem + w + '_AvgWarped' + ext, '-R',
-                               image_ref_stem + w + ext,
-                               transform_stem + '_AvgWarp' + ext,
-                               transform_stem + '_AvgAffine.txt']
+                        # Divide the two average-warp motion-corrected images
+                        print('Dividing average-warp motion-corrected ' +\
+                              'images for each of two wavelengths...')
+                        cmd = [ANTS + 'ImageMath 2',
+                               transformed_stem + '_AvgWarped_ratio' + ext,'/',
+                               transformed_stem + '_' + w1 + '_AvgWarped' + ext,
+                               transformed_stem + '_' + w2 + '_AvgWarped' + ext]
                         print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                    # Divide the first average-warp motion-corrected image by the second
-                    print('Dividing average-warp motion-corrected images for each of two wavelengths...')
-                    cmd = [ANTS+'ImageMath 2',transformed_stem + '_AvgWarped_ratio' + ext,'/',
-                           transformed_stem + '_' + w1 + '_AvgWarped' + ext,
-                           transformed_stem + '_' + w2 + '_AvgWarped' + ext]
-                    print(' '.join(cmd)); os.system(' '.join(cmd))
 
     #-------------------------------------------------------------------------
     # Smooth each motion-corrected image file.
     #-------------------------------------------------------------------------
     if smooth_images:
         try_mkdir(out_path_smoothed)
-        if not convert_images:
-            f = open(os.path.join(out_path, 'n_runs.pkl'), 'r')
-            n_runs = pickle.load(f)
         for irun in range(n_runs):
             for iframe in range(images_per_run):
-                print('Smoothing image ' + str(iframe + 1) + ' from run ' + str(irun + 1))
+                print('Smoothing image ' + str(iframe + 1) +\
+                      ' from run ' + str(irun + 1))
                 stem = 'run' + str(irun + 1) + '_' +\
                        'image' + str(iframe + 1)
                 transformed_stem = os.path.join(out_path_transformed, stem)
@@ -311,14 +315,11 @@ if preprocess_images:
     #-------------------------------------------------------------------------
     if save_montages:
         try_mkdir(out_path_montages)
-        if not convert_images:
-            f = open(os.path.join(out_path, 'n_runs.pkl'), 'r')
-            n_runs = pickle.load(f)
         for irun in range(n_runs):
             for iframe in range(images_per_run):
                 stem = 'run' + str(irun + 1) + '_' +\
                        'image' + str(iframe + 1)
-                print('Convert to jpg and png images; create montage for image ' + \
+                print('Convert to jpg, png images; create montage for image ' + \
                       str(iframe + 1) + ' from run ' + str(irun + 1))
                 image_stem = os.path.join(out_path_images, stem)
                 transformed_stem = os.path.join(out_path_transformed, stem)
@@ -333,28 +334,26 @@ if preprocess_images:
                     convert2png(transformed_stem + '_AvgWarped_ratio')
                     convert2png(smoothed_stem + '_AvgWarped_ratio_smooth')
 
-                cmd = [IMAGEMAGICK+'montage',
-                       image_stem + '_' + w1 + '.png',
-                       image_stem + '_' + w2 + '.png',
-                       transformed_stem + '_AvgAffined_ratio.png',
-                       transformed_stem + '_AvgWarped_ratio.png',
-                       smoothed_stem + '_AvgWarped_ratio_smooth.png',
-                       '-label ' + str(iframe+1),
-                       '-geometry +1+0 -tile 5x -background black',
-                       out_montage]
+                if save_affine_avg:
+                    cmd = [IMAGEMAGICK+'montage',
+                           image_stem + '_' + w1 + '.png',
+                           image_stem + '_' + w2 + '.png',
+                           transformed_stem + '_AvgAffined_ratio.png',
+                           transformed_stem + '_AvgWarped_ratio.png',
+                           smoothed_stem + '_AvgWarped_ratio_smooth.png',
+                           '-label ' + str(iframe+1),
+                           '-geometry +1+0 -tile 5x -background black',
+                           out_montage]
+                else:
+                    cmd = [IMAGEMAGICK+'montage',
+                           image_stem + '_' + w1 + '.png',
+                           image_stem + '_' + w2 + '.png',
+                           transformed_stem + '_AvgWarped_ratio.png',
+                           smoothed_stem + '_AvgWarped_ratio_smooth.png',
+                           '-label ' + str(iframe+1),
+                           '-geometry +1+0 -tile 4x -background black',
+                           out_montage]
                 print(' '.join(cmd)); os.system(' '.join(cmd))
-
-    #-------------------------------------------------------------------------
-    # Save movie of montages
-    # NOTE:  very memory intensive --
-    # better to use another program such as GraphicConverter
-    #-------------------------------------------------------------------------
-    if save_movie:
-        input_montages = os.path.join(out_path_montages, 'montage*.png')
-        out_montage_movie = os.path.join(out_path, 'montages.gif')
-        cmd = [IMAGEMAGICK+'convert', input_montages,
-               '-adjoin -compress none', out_montage_movie]
-        print(' '.join(cmd)); os.system(' '.join(cmd))
 
     #-------------------------------------------------------------------------
     # Stack preprocessed images for analysis
@@ -377,7 +376,7 @@ if preprocess_images:
 
 #=============================================================================
 # Conduct a general linear model analysis on the preprocessed images
-# (Requires image_stack and the following paradigm lists:
+# (Requires image_stack and the following paradigm lists from above:
 #  conditions, onsets, durations, amplitudes)
 #=============================================================================
 if analyze_images:

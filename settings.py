@@ -1,14 +1,12 @@
 #!/usr/bin/python
 
 """
-Settings for preprocess_beebrains.py and process_beebrains.py
+Settings for process_beebrainimages.py
 
-Requirements for preprocess_beebrains.py:
-* Python libraries:  nibabel, numpy, scipy
+Requirements for process_beebrainimages.py:
+* Python libraries:  nibabel, numpy, scipy, nipy
 * ANTS registration software for motion correction
-* ImageMagick -- only if converting images and creating montage movies
-Requirements for process_beebrains.py:
-* Python libraries:  numpy, nipy, nibabel
+* ImageMagick -- only if creating montages/movies
 
 (c) 2012  Arno Klein, under Apache License Version 2.0
           arno@binarybottle.com  .  www.binarybottle.com
@@ -25,19 +23,18 @@ IMAGEMAGICK = '/usr/local/bin/'  # only if converting images and creating montag
 # Settings
 xdim = 130  # x dimension for each image
 ydim = 172  # y dimension for each image
-n_runs = 10
-images_per_run = 232
+images_per_run = 232  # number of images for a given set of conditions (or bee)
+n_runs = 10  # number of experimental "runs" (or bees)
 wavelengths = ['340', '380']
 smooth_sigma = 1
 ref_image = 1
 ext = '.nii.gz'
-n_images = n_runs * images_per_run
 
 # Run preprocessing steps (1=True, 0=False)
 preprocess_images = 1
-convert_images = 0  # convert .pst image slice stack to 2D nifti files
-correct_motion = 0  # apply registration to correct for motion
-smooth_images = 0  # smooth the resulting motion-corrected images
+convert_images = 1  # convert .pst image slice stack to 2D nifti files
+correct_motion = 1  # apply registration to correct for motion
+smooth_images = 1  # smooth the resulting motion-corrected images
 stack_slices = 1
 
 # Run processing steps (1=True, 0=False)
@@ -61,4 +58,3 @@ stop2_column = 9
 save_affine_avg = 1  # Use average of affine transforms
 save_nonlinear_avg = 1  # Use average of nonlinear transforms
 save_montages = 1  # Save for visualizing results
-save_movie = 0  # Very memory intensive -- better to use another program such as GraphicConverter
