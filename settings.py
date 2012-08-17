@@ -24,7 +24,6 @@ IMAGEMAGICK = '/usr/local/bin/'  # only if converting images and creating montag
 xdim = 130  # x dimension for each image
 ydim = 172  # y dimension for each image
 images_per_run = 232  # number of images for a given set of conditions (or bee)
-n_runs = 10  # number of experimental "runs" (or bees)
 wavelengths = ['340', '380']
 smooth_sigma = 1
 ref_image = 1
