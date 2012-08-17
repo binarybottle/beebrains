@@ -184,15 +184,18 @@ if preprocess_images:
 
                 # Loop through images
                 for iframe in range(images_per_run):
-                    image_vector = raw[iframe * xdim * ydim : (iframe + 1) * xdim * ydim]
-                    image_matrix = np.reshape(image_vector, (xdim, ydim))
-
-                    # Save each image as a nifti file
                     converted_file = 'run' + str(n_runs) + '_' +\
                                      'image' + str(iframe + 1) + '_' +\
                                      wavelength + ext
-                    img_ratio_nib = nib.Nifti1Image(image_matrix, np.eye(4))
-                    img_ratio_nib.to_filename(os.path.join(out_path_images, converted_file))
+                    out_converted_file = os.path.join(out_path_images, converted_file)
+                    # Save each image (as nifti) only if output doesn't already exist
+                    if not os.path.exists(out_converted_file):
+
+                        image_vector = raw[iframe * xdim * ydim : (iframe + 1) * xdim * ydim]
+                        image_matrix = np.reshape(image_vector, (xdim, ydim))
+
+                        img_ratio_nib = nib.Nifti1Image(image_matrix, np.eye(4))
+                        img_ratio_nib.to_filename(out_converted_file)
 
     #-------------------------------------------------------------------------
     # Apply motion correction (ANTS) to one of the images
@@ -220,7 +223,10 @@ if preprocess_images:
                 transformed_stem = os.path.join(out_path_transformed, stem)
 
                 # Only run if output doesn't already exist
-                if not os.path.exists(transformed_stem + '_AvgWarped_ratio' + ext):
+                out_moco_file = transformed_stem + '_AvgWarped_ratio' + ext
+                print(out_moco_file)
+                #sys.exit()
+                if not os.path.exists(out_moco_file):
                     for ilambda in range(len(wavelengths)):
                         w = '_' + wavelengths[ilambda]
                         image_ref = image_ref_stem + w + ext
@@ -286,7 +292,7 @@ if preprocess_images:
                         print('Dividing average-warp motion-corrected ' +\
                               'images for each of two wavelengths...')
                         cmd = [ANTS + 'ImageMath 2',
-                               transformed_stem + '_AvgWarped_ratio' + ext,'/',
+                               out_moco_file, '/',
                                transformed_stem + '_' + w1 + '_AvgWarped' + ext,
                                transformed_stem + '_' + w2 + '_AvgWarped' + ext]
                         print(' '.join(cmd)); os.system(' '.join(cmd))
@@ -423,7 +429,6 @@ if analyze_images:
     my_contrast = glm.contrast(contrast)
 
     # Compute the contrast image
-    affine = np.eye(4)
     zvals = my_contrast.zscore()
     contrast_image = nib.Nifti1Image(zvals.T, affine)
 
