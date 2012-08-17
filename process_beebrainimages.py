@@ -190,6 +190,7 @@ if preprocess_images:
                                      'image' + str(iframe + 1) + '_' +\
                                      wavelength + ext
                     out_converted_file = os.path.join(out_path_images, converted_file)
+
                     # Save each image (as nifti) only if output doesn't already exist
                     if not os.path.exists(out_converted_file):
 
@@ -241,7 +242,10 @@ if preprocess_images:
                                '--number-of-affine-iterations',
                                affine_iterations,
                                '--use-Histogram-Matching']
-                        print(' '.join(cmd)); os.system(' '.join(cmd))
+                        # Only run if output doesn't already exist
+                        out_moco_xfmd = transform_stem + w + '_AvgWarp' + ext
+                        if not os.path.exists(out_moco_xfmd):
+                            print(' '.join(cmd)); os.system(' '.join(cmd))
 
                         # Compute the average of the two files' affine transforms,
                         # then apply it to each of two lambda files
@@ -311,9 +315,33 @@ if preprocess_images:
                 transformed_stem = os.path.join(out_path_transformed, stem)
                 smoothed_stem = os.path.join(out_path_smoothed, stem)
                 if save_nonlinear_avg:
-                    smooth2d(transformed_stem + '_AvgWarped_ratio' + ext,
-                        smoothed_stem + '_AvgWarped_ratio_smooth' + ext,
-                        smooth_sigma = smooth_sigma)
+                   # Only run if output doesn't already exist
+                   out_smooth_file = smoothed_stem + '_AvgWarped_ratio_smooth' + ext
+                   if not os.path.exists(out_smooth_file):
+                       smooth2d(transformed_stem + '_AvgWarped_ratio' + ext,
+                                out_smooth_file, smooth_sigma = smooth_sigma)
+
+    #-------------------------------------------------------------------------
+    # Stack preprocessed images for analysis
+    #-------------------------------------------------------------------------
+    if stack_slices:
+        # Only run if output doesn't already exist
+        if not os.path.exists(image_stack_file):
+            print('Stack preprocessed images...')
+            shape = (xdim, ydim, 1, n_images)
+            image_stack = np.zeros(shape)
+            for irun in range(n_runs):
+                for iframe in range(images_per_run):
+                    stem = 'run' + str(irun + 1) + '_' + \
+                           'image' + str(iframe + 1)
+                    smoothed = os.path.join(out_path_smoothed,
+                                            stem + '_AvgWarped_ratio_smooth' + ext)
+                    img = nib.load(smoothed)
+                    slice = img.get_data()
+                    image_stack[:, :, 0, iframe - 1] = slice
+            affine = np.eye(4)
+            img = nib.Nifti1Image(image_stack, affine)
+            nib.save(img, image_stack_file)
 
     #-------------------------------------------------------------------------
     # Convert each nifti image file to jpg and to png
@@ -332,54 +360,37 @@ if preprocess_images:
                 smoothed_stem = os.path.join(out_path_smoothed, stem)
                 out_montage = os.path.join(out_path_montages, stem + '.png')
 
-                convert2png(image_stem + '_' + w1)
-                convert2png(image_stem + '_' + w2)
-                if save_affine_avg:
-                    convert2png(transformed_stem + '_AvgAffined_ratio')
-                if save_nonlinear_avg:
-                    convert2png(transformed_stem + '_AvgWarped_ratio')
-                    convert2png(smoothed_stem + '_AvgWarped_ratio_smooth')
+                # Only run if output doesn't already exist
+                if not os.path.exists(out_montage):
 
-                if save_affine_avg:
-                    cmd = [IMAGEMAGICK+'montage',
-                           image_stem + '_' + w1 + '.png',
-                           image_stem + '_' + w2 + '.png',
-                           transformed_stem + '_AvgAffined_ratio.png',
-                           transformed_stem + '_AvgWarped_ratio.png',
-                           smoothed_stem + '_AvgWarped_ratio_smooth.png',
-                           '-label ' + str(iframe+1),
-                           '-geometry +1+0 -tile 5x -background black',
-                           out_montage]
-                else:
-                    cmd = [IMAGEMAGICK+'montage',
-                           image_stem + '_' + w1 + '.png',
-                           image_stem + '_' + w2 + '.png',
-                           transformed_stem + '_AvgWarped_ratio.png',
-                           smoothed_stem + '_AvgWarped_ratio_smooth.png',
-                           '-label ' + str(iframe+1),
-                           '-geometry +1+0 -tile 4x -background black',
-                           out_montage]
-                print(' '.join(cmd)); os.system(' '.join(cmd))
+                    convert2png(image_stem + '_' + w1)
+                    convert2png(image_stem + '_' + w2)
+                    if save_affine_avg:
+                        convert2png(transformed_stem + '_AvgAffined_ratio')
+                    if save_nonlinear_avg:
+                        convert2png(transformed_stem + '_AvgWarped_ratio')
+                        convert2png(smoothed_stem + '_AvgWarped_ratio_smooth')
 
-    #-------------------------------------------------------------------------
-    # Stack preprocessed images for analysis
-    #-------------------------------------------------------------------------
-    if stack_slices:
-        print('Stack preprocessed images...')
-        shape = (xdim, ydim, 1, n_images)
-        image_stack = np.zeros(shape)
-        for irun in range(n_runs):
-            for iframe in range(images_per_run):
-                stem = 'run' + str(irun + 1) + '_' + \
-                       'image' + str(iframe + 1)
-                smoothed = os.path.join(out_path_smoothed,
-                                        stem + '_AvgWarped_ratio_smooth' + ext)
-                img = nib.load(smoothed)
-                slice = img.get_data()
-                image_stack[:,:,0,i-1] = slice
-        affine = np.eye(4)
-        img = nib.Nifti1Image(image_stack, affine)
-        nib.save(img, image_stack_file)
+                    if save_affine_avg:
+                        cmd = [IMAGEMAGICK+'montage',
+                               image_stem + '_' + w1 + '.png',
+                               image_stem + '_' + w2 + '.png',
+                               transformed_stem + '_AvgAffined_ratio.png',
+                               transformed_stem + '_AvgWarped_ratio.png',
+                               smoothed_stem + '_AvgWarped_ratio_smooth.png',
+                               '-label ' + str(iframe+1),
+                               '-geometry +1+0 -tile 5x -background black',
+                               out_montage]
+                    else:
+                        cmd = [IMAGEMAGICK+'montage',
+                               image_stem + '_' + w1 + '.png',
+                               image_stem + '_' + w2 + '.png',
+                               transformed_stem + '_AvgWarped_ratio.png',
+                               smoothed_stem + '_AvgWarped_ratio_smooth.png',
+                               '-label ' + str(iframe+1),
+                               '-geometry +1+0 -tile 4x -background black',
+                               out_montage]
+                    print(' '.join(cmd)); os.system(' '.join(cmd))
 
 #=============================================================================
 # Conduct a general linear model analysis on the preprocessed images

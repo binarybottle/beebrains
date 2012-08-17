@@ -18,7 +18,7 @@ import os
 # Settings for preprocess_beebrains.py
 #-------------------------------------
 ANTS = os.environ['ANTSPATH']  # for registration (motion correction)
-IMAGEMAGICK = '/usr/local/bin/'  # only if converting images and creating montage movies
+IMAGEMAGICK = ''  # only if converting images and creating montage movies
 
 # Settings
 xdim = 130  # x dimension for each image
