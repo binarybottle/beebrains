@@ -30,14 +30,14 @@ ref_image = 1
 ext = '.nii.gz'
 
 # Run preprocessing steps (1=True, 0=False)
-preprocess_images = 0
+preprocess_images = 1
 convert_images = 1  # convert .pst image slice stack to 2D nifti files
 correct_motion = 1  # apply registration to correct for motion
 smooth_images = 1  # smooth the resulting motion-corrected images
-stack_slices = 1
+stack_slices = 1  # save slice-stack of preprocessed images
 
 # Run processing steps (1=True, 0=False)
-analyze_images = 1
+analyze_images = 0
 plot_design_matrix = 1
 plot_histogram = 1
 plot_contrast = 1

@@ -265,60 +265,60 @@ if preprocess_images:
                         out_moco_xfmd = transform_stem + w + '_AvgWarp' + ext
                         if not os.path.exists(out_moco_xfmd):
                             print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                        # Compute the average of the two files' affine transforms,
-                        # then apply it to each of two lambda files
-                        if save_affine_avg or save_nonlinear_avg:
-                            cmd = [ANTS+'AverageAffineTransform 2',
-                                   transform_stem + '_AvgAffine.txt',
-                                   transform_stem + '_' + w1 + '_Affine.txt',
-                                   transform_stem + '_' + w2 + '_Affine.txt']
-                            print(' '.join(cmd)); os.system(' '.join(cmd))
-                        if save_affine_avg:
-                            for ilambda in range(len(wavelengths)):
-                                w = '_' + wavelengths[ilambda]
-                                cmd = [ANTS+'WarpImageMultiTransform 2',
-                                       image_stem + w + ext,
-                                       transformed_stem + w + '_AvgAffined' + ext, '-R',
-                                       image_ref_stem + w + ext,
-                                       transform_stem + '_AvgAffine.txt']
-                                print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                            # Divide the two average-affine motion-corrected images
-                            print('Dividing average-affine motion-corrected ' +\
-                                  'images for each of two wavelengths...')
-                            cmd = [ANTS+'ImageMath 2',
-                                   transformed_stem + '_AvgAffined_ratio' + ext,'/',
-                                   transformed_stem + '_' + w1 + '_AvgAffined' + ext,
-                                   transformed_stem + '_' + w2 + '_AvgAffined' + ext]
+ 
+                   # Compute the average of the two files' affine transforms,
+                    # then apply it to each of two lambda files
+                    if save_affine_avg or save_nonlinear_avg:
+                        cmd = [ANTS+'AverageAffineTransform 2',
+                               transform_stem + '_AvgAffine.txt',
+                               transform_stem + '_' + w1 + '_Affine.txt',
+                               transform_stem + '_' + w2 + '_Affine.txt']
+                        print(' '.join(cmd)); os.system(' '.join(cmd))
+                    if save_affine_avg:
+                        for ilambda in range(len(wavelengths)):
+                            w = '_' + wavelengths[ilambda]
+                            cmd = [ANTS+'WarpImageMultiTransform 2',
+                                   image_stem + w + ext,
+                                   transformed_stem + w + '_AvgAffined' + ext, '-R',
+                                   image_ref_stem + w + ext,
+                                   transform_stem + '_AvgAffine.txt']
                             print(' '.join(cmd)); os.system(' '.join(cmd))
 
-                        # Compute the average of the two files' nonlinear transforms,
-                        # then apply them to the ratio of the two lambda files
-                        if save_nonlinear_avg:
-                            cmd = [ANTS+'AverageImages 2',
-                                   transform_stem + '_AvgWarp' + ext, '0',
-                                   transform_stem + '_*_Warp' + ext]
+                        # Divide the two average-affine motion-corrected images
+                        print('Dividing average-affine motion-corrected ' +\
+                              'images for each of two wavelengths...')
+                        cmd = [ANTS+'ImageMath 2',
+                               transformed_stem + '_AvgAffined_ratio' + ext,'/',
+                               transformed_stem + '_' + w1 + '_AvgAffined' + ext,
+                               transformed_stem + '_' + w2 + '_AvgAffined' + ext]
+                        print(' '.join(cmd)); os.system(' '.join(cmd))
+
+                    # Compute the average of the two files' nonlinear transforms,
+                    # then apply them to the ratio of the two lambda files
+                    if save_nonlinear_avg:
+                        cmd = [ANTS+'AverageImages 2',
+                               transform_stem + '_AvgWarp' + ext, '0',
+                               transform_stem + '_*_Warp' + ext]
+                        print(' '.join(cmd)); os.system(' '.join(cmd))
+
+                        for ilambda in range(len(wavelengths)):
+                            w = '_' + wavelengths[ilambda]
+                            cmd = [ANTS+'WarpImageMultiTransform 2',
+                                   image_stem + w + ext,
+                                   transformed_stem + w + '_AvgWarped' + ext, '-R',
+                                   image_ref_stem + w + ext,
+                                   transform_stem + '_AvgWarp' + ext,
+                                   transform_stem + '_AvgAffine.txt']
                             print(' '.join(cmd)); os.system(' '.join(cmd))
 
-                            for ilambda in range(len(wavelengths)):
-                                w = '_' + wavelengths[ilambda]
-                                cmd = [ANTS+'WarpImageMultiTransform 2',
-                                       image_stem + w + ext,
-                                       transformed_stem + w + '_AvgWarped' + ext, '-R',
-                                       image_ref_stem + w + ext,
-                                       transform_stem + '_AvgWarp' + ext,
-                                       transform_stem + '_AvgAffine.txt']
-                                print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                            # Divide the two average-warp motion-corrected images
-                            print('Dividing average-warp motion-corrected ' +\
-                                  'images for each of two wavelengths...')
-                            cmd = [ANTS + 'ImageMath 2',
-                                   out_moco_file, '/',
-                                   transformed_stem + '_' + w1 + '_AvgWarped' + ext,
-                                   transformed_stem + '_' + w2 + '_AvgWarped' + ext]
-                            print(' '.join(cmd)); os.system(' '.join(cmd))
+                        # Divide the two average-warp motion-corrected images
+                        print('Dividing average-warp motion-corrected ' +\
+                              'images for each of two wavelengths...')
+                        cmd = [ANTS + 'ImageMath 2',
+                               out_moco_file, '/',
+                               transformed_stem + '_' + w1 + '_AvgWarped' + ext,
+                               transformed_stem + '_' + w2 + '_AvgWarped' + ext]
+                        print(' '.join(cmd)); os.system(' '.join(cmd))
 
     #-------------------------------------------------------------------------
     # Smooth each motion-corrected image file.
