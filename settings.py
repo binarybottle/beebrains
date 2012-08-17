@@ -33,6 +33,7 @@ ext = '.nii.gz'
 preprocess_images = 1
 convert_images = 1  # convert .pst image slice stack to 2D nifti files
 correct_motion = 1  # apply registration to correct for motion
+compute_nonlinear = 1  # Compute a nonlinear transform (else just affine)
 smooth_images = 1  # smooth the resulting motion-corrected images
 stack_slices = 1  # save slice-stack of preprocessed images
 
@@ -53,7 +54,5 @@ stop1_column = 7
 start2_column = 8
 stop2_column = 9
 
-# Save image types:
-save_affine_avg = 1  # Use average of affine transforms
-save_nonlinear_avg = 1  # Use average of nonlinear transforms
-save_montages = 1  # Save for visualizing results
+# Visualizing results
+save_montages = 1  

@@ -244,7 +244,7 @@ if preprocess_images:
                 transform_stem = os.path.join(out_path_transforms, stem)
                 transformed_stem = os.path.join(out_path_transformed, stem)
 
-                # Only run if output doesn't already exist
+                # Run only if output doesn't already exist
                 out_moco_file = transformed_stem + '_AvgWarped_ratio' + ext
                 if not os.path.exists(out_moco_file):
                     for ilambda in range(len(wavelengths)):
@@ -252,8 +252,15 @@ if preprocess_images:
                         image_ref = image_ref_stem + w + ext
                         image_lambda = image_stem + w + ext
                         xfm = transform_stem + w + '_' + ext
-                        affine_iterations = '10000x10000x10000x10000x10000'
-                        nonlin_iterations = '30x99x11'
+                        affine_iterations = '10000x10000x10000x10000x10000'                 
+
+                        # If not computing an nonlinear transform,
+                        # use zero iterations for the nonlinear registration
+                        if compute_nonlinear:
+                            nonlin_iterations = '30x99x11'
+                        else:
+                            nonlin_iterations = '0'
+
                         cmd = [ANTS+'ANTS 2 -m CC[', image_ref + ',' ,
                                image_lambda + ',1,2] -o', xfm,
                                '-r Gauss[2,0] -t SyN[0.5] -i',
@@ -261,64 +268,72 @@ if preprocess_images:
                                '--number-of-affine-iterations',
                                affine_iterations,
                                '--use-Histogram-Matching']
-                        # Only run if output doesn't already exist
+                        # Run only if output doesn't already exist
+                        out_moco_xfmd = transform_stem + w + '_AvgWarp' + ext
+
+                        cmd = [ANTS+'ANTS 2 -m CC[', image_ref + ',' ,
+                               image_lambda + ',1,2] -o', xfm,
+                               '-r Gauss[2,0] -t SyN[0.5] -i',
+                               nonlin_iterations,
+                               '--number-of-affine-iterations',
+                               affine_iterations,
+                               '--use-Histogram-Matching']
+                        # Run only if output doesn't already exist
                         out_moco_xfmd = transform_stem + w + '_AvgWarp' + ext
                         if not os.path.exists(out_moco_xfmd):
                             print(' '.join(cmd)); os.system(' '.join(cmd))
  
-                   # Compute the average of the two files' affine transforms,
+                    # Compute the average of the two files' affine transforms,
                     # then apply it to each of two lambda files
-                    if save_affine_avg or save_nonlinear_avg:
-                        cmd = [ANTS+'AverageAffineTransform 2',
-                               transform_stem + '_AvgAffine.txt',
-                               transform_stem + '_' + w1 + '_Affine.txt',
-                               transform_stem + '_' + w2 + '_Affine.txt']
-                        print(' '.join(cmd)); os.system(' '.join(cmd))
-                    if save_affine_avg:
-                        for ilambda in range(len(wavelengths)):
-                            w = '_' + wavelengths[ilambda]
-                            cmd = [ANTS+'WarpImageMultiTransform 2',
-                                   image_stem + w + ext,
-                                   transformed_stem + w + '_AvgAffined' + ext, '-R',
-                                   image_ref_stem + w + ext,
-                                   transform_stem + '_AvgAffine.txt']
-                            print(' '.join(cmd)); os.system(' '.join(cmd))
+                    cmd = [ANTS+'AverageAffineTransform 2',
+                           transform_stem + '_AvgAffine.txt',
+                           transform_stem + '_' + w1 + '_Affine.txt',
+                           transform_stem + '_' + w2 + '_Affine.txt']
+                    print(' '.join(cmd)); os.system(' '.join(cmd))
 
-                        # Divide the two average-affine motion-corrected images
-                        print('Dividing average-affine motion-corrected ' +\
-                              'images for each of two wavelengths...')
-                        cmd = [ANTS+'ImageMath 2',
-                               transformed_stem + '_AvgAffined_ratio' + ext,'/',
-                               transformed_stem + '_' + w1 + '_AvgAffined' + ext,
-                               transformed_stem + '_' + w2 + '_AvgAffined' + ext]
+                    for ilambda in range(len(wavelengths)):
+                        w = '_' + wavelengths[ilambda]
+                        cmd = [ANTS+'WarpImageMultiTransform 2',
+                               image_stem + w + ext,
+                               transformed_stem + w + '_AvgAffined' + ext, '-R',
+                               image_ref_stem + w + ext,
+                               transform_stem + '_AvgAffine.txt']
                         print(' '.join(cmd)); os.system(' '.join(cmd))
+
+                    # Divide the two average-affine motion-corrected images
+                    print('Dividing average-affine motion-corrected ' +\
+                          'images for each of two wavelengths...')
+                    cmd = [ANTS+'ImageMath 2',
+                           transformed_stem + '_AvgAffined_ratio' + ext,'/',
+                           transformed_stem + '_' + w1 + '_AvgAffined' + ext,
+                           transformed_stem + '_' + w2 + '_AvgAffined' + ext]
+                    print(' '.join(cmd)); os.system(' '.join(cmd))
 
                     # Compute the average of the two files' nonlinear transforms,
                     # then apply them to the ratio of the two lambda files
-                    if save_nonlinear_avg:
-                        cmd = [ANTS+'AverageImages 2',
-                               transform_stem + '_AvgWarp' + ext, '0',
-                               transform_stem + '_*_Warp' + ext]
+                    cmd = [ANTS+'AverageImages 2',
+                           transform_stem + '_AvgWarp' + ext, '0',
+                           transform_stem + '_*_Warp' + ext]
+                    print(' '.join(cmd)); os.system(' '.join(cmd))
+
+                    for ilambda in range(len(wavelengths)):
+                        w = '_' + wavelengths[ilambda]
+                        cmd = [ANTS+'WarpImageMultiTransform 2',
+                               image_stem + w + ext,
+                               transformed_stem + w + '_AvgWarped' + ext, '-R',
+                               image_ref_stem + w + ext,
+                               transform_stem + '_AvgWarp' + ext,
+                               transform_stem + '_AvgAffine.txt']
                         print(' '.join(cmd)); os.system(' '.join(cmd))
 
-                        for ilambda in range(len(wavelengths)):
-                            w = '_' + wavelengths[ilambda]
-                            cmd = [ANTS+'WarpImageMultiTransform 2',
-                                   image_stem + w + ext,
-                                   transformed_stem + w + '_AvgWarped' + ext, '-R',
-                                   image_ref_stem + w + ext,
-                                   transform_stem + '_AvgWarp' + ext,
-                                   transform_stem + '_AvgAffine.txt']
-                            print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                        # Divide the two average-warp motion-corrected images
-                        print('Dividing average-warp motion-corrected ' +\
-                              'images for each of two wavelengths...')
-                        cmd = [ANTS + 'ImageMath 2',
-                               out_moco_file, '/',
-                               transformed_stem + '_' + w1 + '_AvgWarped' + ext,
-                               transformed_stem + '_' + w2 + '_AvgWarped' + ext]
-                        print(' '.join(cmd)); os.system(' '.join(cmd))
+                    # Divide the two average-warp motion-corrected images
+                    print('Dividing average-warp motion-corrected ' +\
+                          'images for each of two wavelengths...')
+                    cmd = [ANTS + 'ImageMath 2',
+                           out_moco_file, '/',
+                           transformed_stem + '_' + w1 + '_AvgWarped' + ext,
+                           transformed_stem + '_' + w2 + '_AvgWarped' + ext]
+                    print(' '.join(cmd)); os.system(' '.join(cmd))
 
     #-------------------------------------------------------------------------
     # Smooth each motion-corrected image file.
@@ -333,18 +348,17 @@ if preprocess_images:
                        'image' + str(iframe + 1)
                 transformed_stem = os.path.join(out_path_transformed, stem)
                 smoothed_stem = os.path.join(out_path_smoothed, stem)
-                if save_nonlinear_avg:
-                   # Only run if output doesn't already exist
-                   out_smooth_file = smoothed_stem + '_AvgWarped_ratio_smooth' + ext
-                   if not os.path.exists(out_smooth_file):
-                       smooth2d(transformed_stem + '_AvgWarped_ratio' + ext,
-                                out_smooth_file, smooth_sigma = smooth_sigma)
+                # Run only if output doesn't already exist
+                out_smooth_file = smoothed_stem + '_AvgWarped_ratio_smooth' + ext
+                if not os.path.exists(out_smooth_file):
+                    smooth2d(transformed_stem + '_AvgWarped_ratio' + ext,
+                             out_smooth_file, smooth_sigma = smooth_sigma)
 
     #-------------------------------------------------------------------------
     # Stack preprocessed images for analysis
     #-------------------------------------------------------------------------
     if stack_slices:
-        # Only run if output doesn't already exist
+        # Run only if output doesn't already exist
         if not os.path.exists(image_stack_file):
             print('Stack preprocessed images...')
             shape = (xdim, ydim, 1, n_images)
@@ -379,18 +393,15 @@ if preprocess_images:
                 smoothed_stem = os.path.join(out_path_smoothed, stem)
                 out_montage = os.path.join(out_path_montages, stem + '.png')
 
-                # Only run if output doesn't already exist
+                # Run only if output doesn't already exist
                 if not os.path.exists(out_montage):
 
                     convert2png(image_stem + '_' + w1)
                     convert2png(image_stem + '_' + w2)
-                    if save_affine_avg:
-                        convert2png(transformed_stem + '_AvgAffined_ratio')
-                    if save_nonlinear_avg:
+                    convert2png(transformed_stem + '_AvgAffined_ratio')
+                    if compute_nonlinear:
                         convert2png(transformed_stem + '_AvgWarped_ratio')
                         convert2png(smoothed_stem + '_AvgWarped_ratio_smooth')
-
-                    if save_affine_avg:
                         cmd = [IMAGEMAGICK+'montage',
                                image_stem + '_' + w1 + '.png',
                                image_stem + '_' + w2 + '.png',
