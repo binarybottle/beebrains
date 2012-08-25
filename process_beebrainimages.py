@@ -49,10 +49,10 @@ https://github.com/nipy/nipy/blob/master/examples/labs/example_glm.py
 #-----------------------------------------------------------------------------
 import os, sys
 import csv
-import nibabel as nib
+import nibabel as nb
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
-
+import cPickle as pickle
 import pylab as mp
 from nipy.modalities.fmri.design_matrix import make_dmtx
 from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
@@ -94,11 +94,11 @@ def convert2png(stem):
 def smooth2d(image_in, image_out, smooth_sigma=smooth_sigma):
     """Smooth each image with a Gaussian filter
     """
-    image_nib = nib.load(image_in)
-    image = image_nib.get_data()
+    image_nb = nb.load(image_in)
+    image = image_nb.get_data()
     image_smooth = gaussian_filter(image, sigma=smooth_sigma, order=0)
-    image_smooth_nib = nib.Nifti1Image(image_smooth, np.eye(4))
-    image_smooth_nib.to_filename(image_out)
+    image_smooth_nb = nb.Nifti1Image(image_smooth, np.eye(4))
+    image_smooth_nb.to_filename(image_out)
 
 def try_mkdir(dir_name):
     try:
@@ -110,10 +110,10 @@ def try_mkdir(dir_name):
 def norm_amplitudes(amplitudes):
     """Make the amplitude values span interval [0,1] better
     """
-    # norm_amps = 1 + 0.1 * (np.log10(np.array(amplitudes)))
-    # return [max([x, 0]) for x in norm_amps]
-    amplitudes = np.array(amplitudes)
-    return amplitudes / max(amplitudes)
+    norm_amps = 1 + 0.1 * (np.log10(np.array(amplitudes)))
+    return [max([x, 0]) for x in norm_amps]
+    #amplitudes = np.array(amplitudes)
+    #return amplitudes / max(amplitudes)
 
 #=============================================================================
 # Read table and construct lists of values and names for output folders
@@ -216,8 +216,8 @@ if preprocess_images:
                         image_vector = raw[iframe * xdim * ydim : (iframe + 1) * xdim * ydim]
                         image_matrix = np.reshape(image_vector, (xdim, ydim))
 
-                        img_ratio_nib = nib.Nifti1Image(image_matrix, np.eye(4))
-                        img_ratio_nib.to_filename(out_converted_file)
+                        img_ratio_nb = nb.Nifti1Image(image_matrix, np.eye(4))
+                        img_ratio_nb.to_filename(out_converted_file)
 
     #-------------------------------------------------------------------------
     # Apply motion correction (ANTS) to one of the images
@@ -231,7 +231,7 @@ if preprocess_images:
     if compute_nonlinear:
         outtype = '_AvgWarp'
     else:
-        outtype = '_AvgAffine'
+        outtype = '_AvgAffin'
     if correct_motion:
         print('Correcting motion...')
         try_mkdir(out_path_transforms)
@@ -363,12 +363,12 @@ if preprocess_images:
                            'image' + str(iframe + 1)
                     smoothed = os.path.join(out_path_smoothed,
                                             stem + outtype + 'ed_ratio_smooth' + ext)
-                    img = nib.load(smoothed)
+                    img = nb.load(smoothed)
                     slice = img.get_data()
                     image_stack[:, :, 0, iframe - 1] = slice
             affine = np.eye(4)
-            img = nib.Nifti1Image(image_stack, affine)
-            nib.save(img, image_stack_file)
+            img = nb.Nifti1Image(image_stack, affine)
+            nb.save(img, image_stack_file)
 
     #-------------------------------------------------------------------------
     # Convert each nifti image file to jpg and to png
@@ -410,24 +410,34 @@ if preprocess_images:
 #  conditions, onsets, durations, amplitudes)
 #=============================================================================
 if analyze_images:
+
+    glm_pickle = os.path.join(out_path, 'glm.pkl')
+    design_matrix_pickle = os.path.join(out_path, 'design_matrix.pkl')
+
     if not preprocess_images:
-        img = nib.load(image_stack_file)
+        img = nb.load(image_stack_file)
         image_stack = img.get_data()
 
     #-------------------------------------------------------------------------
     # Construct a design matrix
     #-------------------------------------------------------------------------
-    frametimes = np.linspace(0, n_images-1, n_images)
-    print('Conditions:\n{}'.format(conditions))
-    print('Amplitudes:\n{}'.format(amplitudes))
-    print('Onsets:\n{}'.format(onsets))
-    print('Durations:\n{}'.format(durations))
-    paradigm = BlockParadigm(con_id=conditions, onset=onsets,
-                             duration=durations, amplitude=amplitudes)
+    if make_design_matrix:
+        print('Make design matrix')
+        frametimes = np.linspace(0, n_images-1, n_images)
+        print('Conditions:\n{}'.format(conditions))
+        print('Amplitudes:\n{}'.format(amplitudes))
+        print('Onsets:\n{}'.format(onsets))
+        print('Durations:\n{}'.format(durations))
+        paradigm = BlockParadigm(con_id=conditions, onset=onsets,
+                                 duration=durations, amplitude=amplitudes)
 
-    dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR',
-                     drift_model='Blank', hfcut=np.inf)
-    design_matrix = dmtx.matrix
+        dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR',
+                         drift_model='Blank', hfcut=np.inf)
+        design_matrix = dmtx.matrix
+        print('Design matrix shape: {}'.format(np.shape(design_matrix)))
+
+        # Save output
+        pickle.dump(design_matrix, design_matrix_pickle)
 
     # Plot the design matrix
     if plot_design_matrix:
@@ -440,32 +450,57 @@ if analyze_images:
     #-------------------------------------------------------------------------
     # Apply a general linear model to all pixels
     #-------------------------------------------------------------------------
-    method = "kalman"
-    model = "ar1"
-    glm = GLM.glm()
-    glm.fit(image_stack.T, design_matrix, method=method, model=model)
+    if apply_glm:
+
+        # Load design matrix
+        if not make_design_matrix:
+            design_matrix = pickle.load(design_matrix_pickle)
+
+        print('Apply general linear model')
+        method = "kalman"
+        model = "ar1"
+        glm = GLM.glm()
+        glm.fit(image_stack.T, design_matrix, method=method, model=model)
+
+        # Save output
+        pickle.dump(glm, glm_pickle)
 
     #-------------------------------------------------------------------------
     # Create a contrast image
     #-------------------------------------------------------------------------
-    # Specify the contrast [1 -1 0 ..]
-    contrast = np.zeros(design_matrix.shape[1])
-    contrast[0] = 1
-    #contrast[1] = 0
-    #contrast[2] = -1
-    my_contrast = glm.contrast(contrast)
+    if make_contrast:
+        print('Make contrast image')
 
-    # Compute the contrast image
-    zvals = my_contrast.zscore()
-    affine = np.eye(4)
-    contrast_image = nib.Nifti1Image(zvals.T, affine)
+        # Load design matrix
+        if not make_design_matrix:
+            design_matrix = pickle.load(design_matrix_pickle)
+        # Load GLM results
+        if not apply_glm:
+            glm = pickle.load(glm_pickle)
 
-    # Save the contrast as an image
-    contrast_file = os.path.join(out_path, 'zmap' + ext)
-    nib.save(contrast_image, contrast_file)
+        # Specify the contrast [1 -1 0 ..]
+        contrast = np.zeros(design_matrix.shape[1])
+        contrast[0] = 1
+        #contrast[1] = 0
+        #contrast[2] = -1
+        my_contrast = glm.contrast(contrast)
+
+        # Compute the contrast image
+        zvals = my_contrast.zscore().squeeze()
+        print('zvals shape: {}'.format(np.shape(zvals)))
+        affine = np.eye(4)
+        contrast_image = nb.Nifti1Image(zvals.T, affine)
+
+        # Save the contrast as a pickle file and an image
+        contrast_pickle = os.path.join(out_path, 'zmap' + ext)
+        pickle.dump(zvals, zvals_pickle)
+        contrast_file = os.path.join(out_path, 'zmap' + ext)
+        nb.save(contrast_image, contrast_file)
 
     # Plot histogram
     if plot_histogram:
+        if not make_contrast:
+            zvals = pickle.load(zvals_pickle)
         h, c = np.histogram(zvals, 100)
         fig2 = mp.figure()
         mp.plot(c[: - 1], h)
@@ -475,6 +510,8 @@ if analyze_images:
 
     # Plot contrast image
     if plot_contrast:
+        if not make_contrast and not plot_histogram:
+            zvals = pickle.load(contrast_pickle)
         fig3 = mp.figure()
         mp.matshow(zvals)
         mp.title('Contrast image')

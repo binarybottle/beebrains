@@ -33,9 +33,9 @@ ext = '.nii.gz'  # output file extension
 #-----------------------------------------------------------------------------
 # Run preprocessing steps (1=True, 0=False)
 #-----------------------------------------------------------------------------
-preprocess_images = 1
+preprocess_images = 0
 #-----------------------------------------------------------------------------
-convert_images = 0  # convert .pst image slice stack to 2D nifti files
+convert_images = 1  # convert .pst image slice stack to 2D nifti files
 correct_motion = 1  # apply registration to correct for motion
 compute_nonlinear = 0  # Compute a nonlinear transform (else just affine)
 smooth_images = 1  # smooth the resulting motion-corrected images
@@ -44,9 +44,12 @@ stack_slices = 1  # save slice-stack of preprocessed images
 #-----------------------------------------------------------------------------
 # Run processing steps (1=True, 0=False)
 #-----------------------------------------------------------------------------
-analyze_images = 0
+analyze_images = 1
 #-----------------------------------------------------------------------------
-plot_design_matrix = 1
+make_design_matrix = 0
+plot_design_matrix = 0
+apply_glm = 0
+make_contrast = 1
 plot_histogram = 1
 plot_contrast = 1
 
@@ -66,4 +69,4 @@ stop2_column = 9
 #-----------------------------------------------------------------------------
 # Visualizing results
 #-----------------------------------------------------------------------------
-save_montages = 1
+save_montages = 0
