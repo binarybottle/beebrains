@@ -12,51 +12,35 @@ Requirements for process_beebrainimages.py:
           arno@binarybottle.com  .  www.binarybottle.com
 """
 
-import os
-
 #-----------------------------------------------------------------------------
 # Settings
 #-----------------------------------------------------------------------------
-ANTS = os.environ['ANTSPATH']  # for registration (motion correction)
-ANTSAFFINE = os.environ['ANTSPATH2']  # for registration (motion correction)
-IMAGEMAGICK = ''  # only if converting images and creating montage movies
-
-# Settings
 xdim = 130  # x dimension for each image
 ydim = 172  # y dimension for each image
 images_per_run = 232  # number of images for a given set of conditions (or bee)
+onset_list = [73, 93]
+duration_list = [11, 11]
+amplitude_list = [0.000001, 0.0001, 0.001, 0.01]
 wavelengths = ['340', '380']  # strings indicating paired images to divide
 smooth_sigma = 1  # sigma of Gaussian kernel
-ref_image = 1  # image number to use as registration reference
 ext = '.nii.gz'  # output file extension
-
-#-----------------------------------------------------------------------------
-# Run preprocessing steps (1=True, 0=False)
-#-----------------------------------------------------------------------------
-preprocess_images = 0
-#-----------------------------------------------------------------------------
-convert_images = 1  # convert .pst image slice stack to 2D nifti files
-correct_motion = 1  # apply registration to correct for motion
-compute_nonlinear = 0  # Compute a nonlinear transform (else just affine)
-smooth_images = 1  # smooth the resulting motion-corrected images
-stack_slices = 1  # save slice-stack of preprocessed images
 
 #-----------------------------------------------------------------------------
 # Run processing steps (1=True, 0=False)
 #-----------------------------------------------------------------------------
-analyze_images = 1
-#-----------------------------------------------------------------------------
-make_design_matrix = 0
-plot_design_matrix = 0
-apply_glm = 0
-make_contrast = 1
-plot_histogram = 1
+convert_images = 0  # convert .pst image slice stack to 2D nifti files
+divide_images = 0  # divide one wavelength's image volume by the other
+correct_motion = 0  # apply registration to correct for motion
+smooth_images = 0  # smooth the resulting motion-corrected images
+run_analysis = 1
+tests = [1, 0, 0, 0, 0]
+plot_design_matrix = 1
+plot_histogram = 0
 plot_contrast = 1
 
 #-----------------------------------------------------------------------------
 # Table parameters (indices start from 0):
 #-----------------------------------------------------------------------------
-start_row = 1
 behavior_column = 1
 amplitude_column = 3
 wavelength_column = 4

@@ -4,23 +4,21 @@ Preprocessing steps:
 
 (1) Open a bee's table.
 (2) Convert each .pst image file listed in each row of the table
-    to nifti (neuroimaging file) format.
-(3) Compute an affine and a nonlinear transform for each image
-    that registers that image to the middle image in its wavelength
-    set (ANTS software from UPenn).
-(4) For each pair of images (corresponding to wavelength set 1 and 2),
-    apply their affine and nonlinear transforms.
-    Also compose the average of their affine and nonlinear transforms
-    and apply them to both images.
-(5) Divide each motion-corrected image corresponding to one
-    wavelength by the motion-corrected image of a second wavelength.
-(6) Smooth each ratio image (from 5) with a Gaussian kernel.
+    to nifti (neuroimaging file) format and create a slice stack
+    corresponding to each of two wavelengths.
+(3) Apply FSL's motion correction to each slice stack.
+(4) Divide the motion-corrected image volume for one
+    wavelength by the motion-corrected image for the second wavelength.
+(6) Smooth each ratio image with a Gaussian kernel.
 
 Processing steps:
 
 (1) Construct a design matrix
 (2) Apply a GLM to all voxels
 (3) Create a contrast image
+
+Contrast condition 1 vs. condition 2, holding condition 3 constant,
+in our case, sleep vs. awake holding concentration of odorant constant.
 
 Outputs: Nifti files for each table (for each bee).
 
@@ -51,8 +49,6 @@ import os, sys
 import csv
 import nibabel as nb
 import numpy as np
-from scipy.ndimage.filters import gaussian_filter
-import cPickle as pickle
 import pylab as mp
 from nipy.modalities.fmri.design_matrix import make_dmtx
 from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
@@ -61,14 +57,14 @@ import nipy.labs.glm as GLM
 from settings import *
 
 #-----------------------------------------------------------------------------
-# Command-line arguments
+# Command-line arguments and output file names
 #-----------------------------------------------------------------------------
 args = sys.argv[1:]
 if len(args)<3:
     print("\n\t Please provide the names of two directories: \
                 one containing .lst table files, another to save output.")
     print("\t Example: python " + sys.argv[0] + \
-          " data/Bee1_lr1203131.txt data/Bee1_lr1203131.pst output")
+          " data/Bee1_lr120313l.txt data/Bee1_lr120313l.pst output")
     sys.exit()
 else:
     table_file = str(args[0])
@@ -80,33 +76,18 @@ else:
     except IOError:
         print("Cannot make " + output_path + " directory.")
 
+# Output directory
+in_stem = os.path.splitext(os.path.basename(table_file))[0]
+out_path = os.path.join(output_path, in_stem)
+try:
+    if not os.path.exists(out_path):
+        os.mkdir(out_path)
+except IOError:
+    print("Cannot make " + out_path + " directory.")
+
 #-----------------------------------------------------------------------------
 # Functions
 #-----------------------------------------------------------------------------
-def convert2png(stem):
-    """Convert nifti file to jpeg and png
-    """
-    cmd = [ANTS+'ConvertToJpg', stem + ext, stem + '.jpg']
-    print(' '.join(cmd)); os.system(' '.join(cmd))
-    cmd = [IMAGEMAGICK+'convert', stem + '.jpg', stem + '.png']
-    print(' '.join(cmd)); os.system(' '.join(cmd))
-
-def smooth2d(image_in, image_out, smooth_sigma=smooth_sigma):
-    """Smooth each image with a Gaussian filter
-    """
-    image_nb = nb.load(image_in)
-    image = image_nb.get_data()
-    image_smooth = gaussian_filter(image, sigma=smooth_sigma, order=0)
-    image_smooth_nb = nb.Nifti1Image(image_smooth, np.eye(4))
-    image_smooth_nb.to_filename(image_out)
-
-def try_mkdir(dir_name):
-    try:
-        if not os.path.exists(dir_name):
-            os.mkdir(dir_name)
-    except IOError:
-        print("Cannot make " + dir_name + " directory.")
-
 def norm_amplitudes(amplitudes):
     """Make the amplitude values span interval [0,1] better
     """
@@ -116,404 +97,251 @@ def norm_amplitudes(amplitudes):
     #return amplitudes / max(amplitudes)
 
 #=============================================================================
-# Read table and construct lists of values and names for output folders
-# ----------------------------------------------------------------------------
-# Skip rows (starting from start_row) and build lists
-# NOTE: Double some fields because of onsets and durations for two wavelengths
+# Loop through tests
 #=============================================================================
-try:
-    csv_reader = csv.reader(open(table_file, 'rU'), dialect=csv.excel_tab)
-except IOError:
-    print("Cannot open " + table_file + ".")
+for itest, test in enumerate(tests):
+    ntest = itest + 1
+    print('Test ' + str(ntest))
 
-conditions = []
-amplitudes = []
-onsets = []
-durations = []
-n_rows = 0
-n_runs = 0
-for irow, row in enumerate(csv_reader):
-    if irow >= start_row:
-        n_rows += 1
-        if np.mod(n_rows, 2):
-            n_runs += 1
-            if row[behavior_column] == "wake":
-                conditions.append(1)
-                conditions.append(1)
-            elif row[behavior_column] == "sleep":
-                conditions.append(0)
-                conditions.append(0)
-            amplitudes.append(np.float(row[amplitude_column]))
-            amplitudes.append(np.float(row[amplitude_column]))
-            offset = (n_runs - 1) * images_per_run
-            onsets.append(offset + int(row[start1_column]))
-            onsets.append(offset + int(row[start2_column]))
-            durations.append(int(row[stop1_column]) - int(row[start1_column]))
-            durations.append(int(row[stop2_column]) - int(row[start2_column]))
-n_images = n_runs * images_per_run
+    #=========================================================================
+    # Models for analysis
+    #=========================================================================
+    if ntest == 1:
+        #---------------------------------------------------------------------
+        # Test 1. effect of odor vs. no odor (asleep, maximum concentration)
+        #---------------------------------------------------------------------
+        rows = [8, 9]
+        conditions = [0, 0]
+        amplitudes = [1, 1]
+        onsets = [onset_list[0], onset_list[1]]
+        durations = duration_list
+    elif ntest == 2:
+        #---------------------------------------------------------------------
+        # Test 2. effect of odor vs. no odor (awake, maximum concentration)
+        #---------------------------------------------------------------------
+        rows = [18, 19]
+        conditions = [0, 0]
+        amplitudes = [1, 1]
+        onsets = [onset_list[0], onset_list[1]]
+        durations = duration_list
+    elif ntest == 3:
+        #---------------------------------------------------------------------
+        # Test 3. effect of concentration (asleep)
+        #---------------------------------------------------------------------
+        rows = range(2, 10)
+        n_runs = len(rows)
+        conditions = np.zeros(2 * len(amplitude_list), dtype=int).tolist()
+        conditions.extend([x + 1 for x in range(n_runs)])
+        oneruns = [1 for x in range(n_runs)]
+        amplitudes = [[x, x] for x in amplitude_list]
+        amplitudes.append(oneruns)
+        amplitudes = [x for lst in amplitudes for x in lst]
+        # Normalize amplitudes
+        amplitudes = norm_amplitudes(amplitudes)
+        durations = []
+        [durations.extend(duration_list) for x in range(n_runs)]
+        onsets = []
+        for irun in range(n_runs):
+            offset = irun * images_per_run
+            onsets.append(offset + onset_list[0])
+            onsets.append(offset + onset_list[1])
+    elif ntest == 4:
+        #---------------------------------------------------------------------
+        # Test 4. effect of concentration (awake)
+        #---------------------------------------------------------------------
+        rows = range(12, 20)
+        n_runs = len(rows)
+        conditions = np.zeros(2 * len(amplitude_list), dtype=int).tolist()
+        conditions.extend([x + 1 for x in range(n_runs)])
+        oneruns = [1 for x in range(n_runs)]
+        amplitudes = [[x, x] for x in amplitude_list]
+        amplitudes.append(oneruns)
+        amplitudes = [x for lst in amplitudes for x in lst]
+        # Normalize amplitudes
+        amplitudes = norm_amplitudes(amplitudes)
+        durations = []
+        [durations.extend(duration_list) for x in range(n_runs)]
+        onsets = []
+        for irun in range(n_runs):
+            offset = irun * images_per_run
+            onsets.append(offset + onset_list[0])
+            onsets.append(offset + onset_list[1])
+    elif ntest == 5:
+        #---------------------------------------------------------------------
+        # Test 5. effect of asleep vs. awake (all concentrations)
+        #---------------------------------------------------------------------
+        rows_asleep = range(2, 10)
+        rows_awake = range(12, 20)
+        rows = rows_asleep
+        rows.extend(rows_awake)
+        conditions = [0, 1]
+        amplitudes = [1, 1]
+        onsets = [0, len(rows_asleep)/2 * images_per_run]
+        durations = [len(rows_asleep)/2 * images_per_run,
+                     len(rows_awake)/2 * images_per_run]
 
-# Normalize amplitudes
-amplitudes = norm_amplitudes(amplitudes)
-
-# Output directory names
-in_stem = os.path.splitext(os.path.basename(table_file))[0]
-out_path = os.path.join(output_path, in_stem)
-out_path_images = os.path.join(out_path, 'images')
-out_path_transforms = os.path.join(out_path, 'transforms')
-out_path_transformed = os.path.join(out_path, 'transformed')
-out_path_smoothed = os.path.join(out_path, 'smoothed' + str(smooth_sigma))
-out_path_montages = os.path.join(out_path, 'montages')
-image_stack_file = os.path.join(out_path, 'preprocessed_slicestack' + ext)
-try_mkdir(out_path)
-
-#=============================================================================
-# Preprocess (coregister, smooth) images
-#=============================================================================
-if preprocess_images:
-
-    w1 = wavelengths[0]
-    w2 = wavelengths[1]
-
+    #=========================================================================
+    # Preprocess (coregister, divide, and smooth) images
+    #=========================================================================
+    n_images = len(rows)/2 * images_per_run
+    converted_file1 = os.path.join(out_path,
+        'converted' + wavelengths[0] + '_test' + str(ntest) + ext)
+    converted_file2 = os.path.join(out_path,
+        'converted' + wavelengths[1] + '_test' + str(ntest) + ext)
+    ratio_file = os.path.join(out_path, 'ratio_test' + str(ntest) + ext)
+    moco_file =  os.path.join(out_path, 'moco_test' + str(ntest) + ext)
+    smooth_file = os.path.join(out_path, 'smooth_test' + str(ntest) + ext)
     #-------------------------------------------------------------------------
-    # Convert images to nifti files
+    # Convert each .pst image file listed in each row of the table
+    # to nifti (neuroimaging file) format and create a slice stack
+    # corresponding to each of two wavelengths
     #-------------------------------------------------------------------------
     if convert_images:
-
-        # Make output directory
-        try_mkdir(out_path_images)
+        print('Convert images...')
 
         # Load table
         try:
             csv_reader = csv.reader(open(table_file, 'rU'), dialect=csv.excel_tab)
         except IOError:
-            print("Cannot open " + table_file + ".")
+            print("  Cannot open " + table_file + ".")
 
-        # Loop through rows (starting from start_row)
-        n_rows = 0
-        n_runs = 0
+        # Loop through rows
+        count1 = 0
+        count2 = 0
+        image_stack1 = np.zeros((xdim, ydim, 1, n_images))
+        image_stack2 = np.zeros((xdim, ydim, 1, n_images))
         for irow, row in enumerate(csv_reader):
-            if irow >= start_row:
-                n_rows += 1
-                if np.mod(n_rows, 2):
-                    n_runs += 1
+            if irow in rows:
 
                 # Load .pst file
                 file = os.path.join(images_dir, row[image_file_column])
                 wavelength = row[wavelength_column]
-                print('Loading ' + file + ' and converting images...')
+                print('  Loading ' + file + ' and converting images...')
                 raw = np.fromfile(file, dtype='<i2')
-
-                # Loop through images
                 for iframe in range(images_per_run):
-                    converted_file = 'run' + str(n_runs) + '_' +\
-                                     'image' + str(iframe + 1) + '_' +\
-                                     wavelength + ext
-                    out_converted_file = os.path.join(out_path_images, converted_file)
+                    image_vector = raw[iframe * xdim * ydim : (iframe + 1) * xdim * ydim]
+                    image_matrix = np.reshape(image_vector, (xdim, ydim))
 
-                    # Save each image (as nifti) only if output doesn't already exist
-                    if not os.path.exists(out_converted_file):
+                    # Stack images
+                    if wavelength == wavelengths[0]:
+                        image_stack1[:, :, 0, count1] = image_matrix
+                        count1 += 1
+                    elif wavelength == wavelengths[1]:
+                        image_stack2[:, :, 0, count2] = image_matrix
+                        count2 += 1
 
-                        image_vector = raw[iframe * xdim * ydim : (iframe + 1) * xdim * ydim]
-                        image_matrix = np.reshape(image_vector, (xdim, ydim))
-
-                        img_ratio_nb = nb.Nifti1Image(image_matrix, np.eye(4))
-                        img_ratio_nb.to_filename(out_converted_file)
+        nb.save(nb.Nifti1Image(image_stack1, np.eye(4)), converted_file1)
+        nb.save(nb.Nifti1Image(image_stack2, np.eye(4)), converted_file2)
 
     #-------------------------------------------------------------------------
-    # Apply motion correction (ANTS) to one of the images
+    # Divide the image volume for one wavelength by the motion-corrected
+    # image for the second wavelength (assumded to be aligned slice-wise)
     #-------------------------------------------------------------------------
-    # Warp: ANTS 2 -m CC[target.nii.gz, source.nii.gz, 1, 2] -o transform.nii.gz
-    #              -r Gauss[2,0] -t SyN[0.5] -i 30x99x11 --use-Histogram-Matching
-    #              --number-of-affine-iterations 10000x10000x10000x10000x10000
-    # Reslice: WarpImageMultiTransform 2 source.nii.gz source2target.nii.gz
-    #              -R target.nii transformWarp.nii.gz transformAffine.txt
+    if divide_images:
+        print('Dividing image volume of wavelength 1 by image volume of wavelength 2...')
+        cmd = ['  fslmaths', converted_file1, '-div', converted_file2, ratio_file]
+        print(' '.join(cmd)); os.system(' '.join(cmd))
+
     #-------------------------------------------------------------------------
-    if compute_nonlinear:
-        outtype = '_AvgWarp'
-    else:
-        outtype = '_AvgAffin'
+    # Apply FSL's motion correction to each slice stack
+    #-------------------------------------------------------------------------
     if correct_motion:
         print('Correcting motion...')
-        try_mkdir(out_path_transforms)
-        try_mkdir(out_path_transformed)
-        for irun in range(n_runs):
-            for iframe in range(images_per_run):
-
-                stem = 'run' + str(irun + 1) + '_' +\
-                       'image' + str(iframe + 1)
-                ref_stem = 'run' + str(irun + 1) + '_' +\
-                           'image' + str(ref_image)
-                image_stem = os.path.join(out_path_images, stem)
-                image_ref_stem = os.path.join(out_path_images, ref_stem)
-                transform_stem = os.path.join(out_path_transforms, stem)
-                transformed_stem = os.path.join(out_path_transformed, stem)
-
-                # Run only if output doesn't already exist
-                out_moco_file = transformed_stem + outtype + 'ed_ratio' + ext
-                if not os.path.exists(out_moco_file):
-                    for ilambda in range(len(wavelengths)):
-                        w = '_' + wavelengths[ilambda]
-                        image_ref = image_ref_stem + w + ext
-                        image_lambda = image_stem + w + ext
-                        xfm = transform_stem + w + '_' + ext
-                        affine_iterations = '10000x10000x10000x10000x10000'                 
-
-                        # If not computing an nonlinear transform,
-                        # use zero iterations for the nonlinear registration
-                        if compute_nonlinear:
-                            nonlin_iterations = '30x99x11'
-                        else:
-                            nonlin_iterations = '0'
-
-                        cmd = [ANTS+'ANTS 2 -m CC[', image_ref + ',' ,
-                               image_lambda + ',1,2] -o', xfm,
-                               '-r Gauss[2,0] -t SyN[0.5] -i',
-                               nonlin_iterations,
-                               '--number-of-affine-iterations',
-                               affine_iterations,
-                               '--use-Histogram-Matching']
-                        # Run only if output doesn't already exist
-                        out_moco_xfmd = transform_stem + w + outtype + ext
-                        if not os.path.exists(out_moco_xfmd):
-                            print(' '.join(cmd)); os.system(' '.join(cmd))
- 
-                    # Compute the average of the two files' affine transforms,
-                    # then apply it to each of two lambda files
-                    cmd = [ANTSAFFINE+'AverageAffineTransform 2',
-                           transform_stem + '_AvgAffine.txt',
-                           transform_stem + '_' + w1 + '_Affine.txt',
-                           transform_stem + '_' + w2 + '_Affine.txt']
-                    print(' '.join(cmd)); os.system(' '.join(cmd))
-                    for ilambda in range(len(wavelengths)):
-                        w = '_' + wavelengths[ilambda]
-                        cmd = [ANTS+'WarpImageMultiTransform 2',
-                               image_stem + w + ext,
-                               transformed_stem + w + '_AvgAffined' + ext, '-R',
-                               image_ref_stem + w + ext,
-                               transform_stem + '_AvgAffine.txt']
-                        print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                    # Divide the two average-affine motion-corrected images
-                    print('Dividing average-affine motion-corrected ' +\
-                          'images for each of two wavelengths...')
-                    cmd = [ANTS+'ImageMath 2',
-                           transformed_stem + '_AvgAffined_ratio' + ext,'/',
-                           transformed_stem + '_' + w1 + '_AvgAffined' + ext,
-                           transformed_stem + '_' + w2 + '_AvgAffined' + ext]
-                    print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                    if compute_nonlinear:
-                        # Compute the average of the two files' nonlinear transforms,
-                        # then apply them to the ratio of the two lambda files
-                        cmd = [ANTS+'AverageImages 2',
-                               transform_stem + '_AvgWarp' + ext, '0',
-                               transform_stem + '_*_Warp' + ext]
-                        print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                        for ilambda in range(len(wavelengths)):
-                            w = '_' + wavelengths[ilambda]
-                            cmd = [ANTS+'WarpImageMultiTransform 2',
-                                   image_stem + w + ext,
-                                   transformed_stem + w + '_AvgWarped' + ext, '-R',
-                                   image_ref_stem + w + ext,
-                                   transform_stem + '_AvgWarp' + ext,
-                                   transform_stem + '_AvgAffine.txt']
-                            print(' '.join(cmd)); os.system(' '.join(cmd))
-
-                        # Divide the two average-warp motion-corrected images
-                        print('Dividing average-warp motion-corrected ' +\
-                              'images for each of two wavelengths...')
-                        cmd = [ANTS + 'ImageMath 2',
-                               transformed_stem + '_AvgWarped_ratio' + ext,'/',
-                               transformed_stem + '_' + w1 + '_AvgWarped' + ext,
-                               transformed_stem + '_' + w2 + '_AvgWarped' + ext]
-                        print(' '.join(cmd)); os.system(' '.join(cmd))
+        cmd = ['  mcflirt -in', ratio_file, '-out', moco_file]
+        print(' '.join(cmd)); os.system(' '.join(cmd))
+        # cmd = ['  mcflirt -in', ratio_file, '-out moco -edge']
+        # print(' '.join(cmd)); os.system(' '.join(cmd))
+        # cmd = ['  mv crefvol_moco.nii.gz', moco_file]
+        # print(' '.join(cmd)); os.system(' '.join(cmd))
 
     #-------------------------------------------------------------------------
-    # Smooth each motion-corrected image file.
+    # Smooth each ratio image with a Gaussian kernel.
     #-------------------------------------------------------------------------
     if smooth_images:
-        try_mkdir(out_path_smoothed)
-        for irun in range(n_runs):
-            for iframe in range(images_per_run):
-                print('Smoothing image ' + str(iframe + 1) +\
-                      ' from run ' + str(irun + 1))
-                stem = 'run' + str(irun + 1) + '_' +\
-                       'image' + str(iframe + 1)
-                transformed_stem = os.path.join(out_path_transformed, stem)
-                smoothed_stem = os.path.join(out_path_smoothed, stem)
-                # Run only if output doesn't already exist
-                out_smooth_file = smoothed_stem + outtype + 'ed_ratio_smooth' + ext
-                if not os.path.exists(out_smooth_file):
-                    smooth2d(transformed_stem + outtype + 'ed_ratio' + ext,
-                             out_smooth_file, smooth_sigma = smooth_sigma)
+        print('Smoothing image')
+        cmd = ['  fslmaths', moco_file, '-s', str(smooth_sigma), smooth_file]
+        print(' '.join(cmd)); os.system(' '.join(cmd))
 
-    #-------------------------------------------------------------------------
-    # Stack preprocessed images for analysis
-    #-------------------------------------------------------------------------
-    if stack_slices:
-        # Run only if output doesn't already exist
-        if not os.path.exists(image_stack_file):
-            print('Stack preprocessed images...')
-            shape = (xdim, ydim, 1, n_images)
-            image_stack = np.zeros(shape)
-            for irun in range(n_runs):
-                for iframe in range(images_per_run):
-                    stem = 'run' + str(irun + 1) + '_' + \
-                           'image' + str(iframe + 1)
-                    smoothed = os.path.join(out_path_smoothed,
-                                            stem + outtype + 'ed_ratio_smooth' + ext)
-                    img = nb.load(smoothed)
-                    slice = img.get_data()
-                    image_stack[:, :, 0, iframe - 1] = slice
-            affine = np.eye(4)
-            img = nb.Nifti1Image(image_stack, affine)
-            nb.save(img, image_stack_file)
+    #=========================================================================
+    # Conduct a general linear model analysis on the preprocessed images per test
+    # (Requires image_stack and the following paradigm lists from above:
+    #  conditions, onsets, durations, amplitudes)
+    #=========================================================================
+    if run_analysis:
+        ('Run general linear model analysis for each test...')
+        if not smooth_images:
+            img = nb.load(smooth_file)
+            image_stack = img.get_data()
 
-    #-------------------------------------------------------------------------
-    # Convert each nifti image file to jpg and to png
-    # and save a montage of preprocessed images
-    #-------------------------------------------------------------------------
-    if save_montages:
-        try_mkdir(out_path_montages)
-        for irun in range(n_runs):
-            for iframe in range(images_per_run):
-                stem = 'run' + str(irun + 1) + '_' +\
-                       'image' + str(iframe + 1)
-                print('Convert to jpg, png images; create montage for image ' + \
-                      str(iframe + 1) + ' from run ' + str(irun + 1))
-                image_stem = os.path.join(out_path_images, stem)
-                transformed_stem = os.path.join(out_path_transformed, stem)
-                smoothed_stem = os.path.join(out_path_smoothed, stem)
-                out_montage = os.path.join(out_path_montages, stem + '.png')
-
-                # Run only if output doesn't already exist
-                if not os.path.exists(out_montage):
-
-                    convert2png(image_stem + '_' + w1)
-                    convert2png(image_stem + '_' + w2)
-                    convert2png(transformed_stem + outtype + 'ed_ratio')
-                    convert2png(smoothed_stem + outtype + 'ed_ratio_smooth')
-                    cmd = [IMAGEMAGICK+'montage',
-                           image_stem + '_' + w1 + '.png',
-                           image_stem + '_' + w2 + '.png',
-                           transformed_stem + outtype + 'ed_ratio.png',
-                           smoothed_stem + outtype + 'ed_ratio_smooth.png',
-                           '-label ' + str(iframe+1),
-                           '-geometry +1+0 -tile 5x -background black',
-                           out_montage]
-                    print(' '.join(cmd)); os.system(' '.join(cmd))
-
-#=============================================================================
-# Conduct a general linear model analysis on the preprocessed images
-# (Requires image_stack and the following paradigm lists from above:
-#  conditions, onsets, durations, amplitudes)
-#=============================================================================
-if analyze_images:
-
-    glm_pickle = os.path.join(out_path, 'glm.pkl')
-    design_matrix_pickle = os.path.join(out_path, 'design_matrix.pkl')
-
-    if not preprocess_images:
-        img = nb.load(image_stack_file)
-        image_stack = img.get_data()
-
-    #-------------------------------------------------------------------------
-    # Construct a design matrix
-    #-------------------------------------------------------------------------
-    if make_design_matrix:
-        print('Make design matrix')
-        frametimes = np.linspace(0, n_images-1, n_images)
-        print('Conditions:\n{}'.format(conditions))
-        print('Amplitudes:\n{}'.format(amplitudes))
-        print('Onsets:\n{}'.format(onsets))
-        print('Durations:\n{}'.format(durations))
+        #-----------------------------------------------------------------
+        # Construct a design matrix for each test
+        #-----------------------------------------------------------------
+        print('  Make design matrix...')
+        print('    Conditions:\n      {}'.format(conditions))
+        print('    Amplitudes:\n      {}'.format(amplitudes))
+        print('    Onsets:\n      {}'.format(onsets))
+        print('    Durations:\n      {}'.format(durations))
         paradigm = BlockParadigm(con_id=conditions, onset=onsets,
                                  duration=durations, amplitude=amplitudes)
+        frametimes = np.linspace(0, n_images-1, n_images)
 
         dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR',
                          drift_model='Blank', hfcut=np.inf)
         design_matrix = dmtx.matrix
-        print('Design matrix shape: {}'.format(np.shape(design_matrix)))
 
-        # Save output
-        pickle.dump(design_matrix, design_matrix_pickle)
-
-    # Plot the design matrix
-    if plot_design_matrix:
-        fig1 = mp.figure(figsize=(10, 6))
-        dmtx.show()
-        mp.title('Block design matrix')
-        fig1_file = os.path.join(out_path, 'design_matrix.png')
-        mp.savefig(fig1_file)
-
-    #-------------------------------------------------------------------------
-    # Apply a general linear model to all pixels
-    #-------------------------------------------------------------------------
-    if apply_glm:
-
-        # Load design matrix
-        if not make_design_matrix:
-            design_matrix = pickle.load(design_matrix_pickle)
-
-        print('Apply general linear model')
+        # Plot the design matrix
+        if plot_design_matrix:
+            fig1 = mp.figure(figsize=(10, 6))
+            dmtx.show()
+            mp.title('Block design matrix')
+            fig1_file = os.path.join(out_path, 'design_matrix_test' + str(ntest) + '.png')
+            mp.savefig(fig1_file)
+        """
+        #-----------------------------------------------------------------
+        # Apply a general linear model to all pixels
+        #-----------------------------------------------------------------
+        print('   Apply general linear model...')
         method = "kalman"
         model = "ar1"
         glm = GLM.glm()
         glm.fit(image_stack.T, design_matrix, method=method, model=model)
 
-        # Save output
-        pickle.dump(glm, glm_pickle)
-
-    #-------------------------------------------------------------------------
-    # Create a contrast image
-    #-------------------------------------------------------------------------
-    if make_contrast:
-        print('Make contrast image')
-
-        # Load design matrix
-        if not make_design_matrix:
-            design_matrix = pickle.load(design_matrix_pickle)
-        # Load GLM results
-        if not apply_glm:
-            glm = pickle.load(glm_pickle)
+        #-----------------------------------------------------------------
+        # Create a contrast image
+        #
+        # Contrast condition 1 vs. condition 2, holding condition 3 constant
+        # (sleep vs. awake holding concentration of odorant constant)
+        #-----------------------------------------------------------------
+        print('  Make contrast image...')
 
         # Specify the contrast [1 -1 0 ..]
         contrast = np.zeros(design_matrix.shape[1])
         contrast[0] = 1
-        #contrast[1] = 0
-        #contrast[2] = -1
-        my_contrast = glm.contrast(contrast)
+        contrast[1] = -1
+        glm_contrast = glm.contrast(contrast)
 
         # Compute the contrast image
-        zvals = my_contrast.zscore().squeeze()
-        print('zvals shape: {}'.format(np.shape(zvals)))
-        affine = np.eye(4)
-        contrast_image = nb.Nifti1Image(zvals.T, affine)
+        zvalues = glm_contrast.zscore().squeeze()
+        contrast_image = nb.Nifti1Image(zvalues.T, np.eye(4))
 
-        # Save the contrast as a pickle file and an image
-        contrast_pickle = os.path.join(out_path, 'zmap' + ext)
-        pickle.dump(zvals, zvals_pickle)
-        contrast_file = os.path.join(out_path, 'zmap' + ext)
+        # Save the contrast as an image
+        contrast_file = os.path.join(out_path, 'zmap_test' + str(ntest) + ext)
         nb.save(contrast_image, contrast_file)
 
-    # Plot histogram
-    if plot_histogram:
-        if not make_contrast:
-            zvals = pickle.load(zvals_pickle)
-        h, c = np.histogram(zvals, 100)
-        fig2 = mp.figure()
-        mp.plot(c[: - 1], h)
-        mp.title('Histogram of the z-values')
-        fig2_file = os.path.join(out_path, 'histogram.png')
-        mp.savefig(fig2_file)
+        # Plot histogram
+        if plot_histogram:
+            h, c = np.histogram(zvalues, 100)
+            fig2 = mp.figure()
+            mp.plot(c[: - 1], h)
+            mp.title('Test' + str(ntest) + ': Histogram of the z-values')
+            fig2_file = os.path.join(out_path, 'histogram_test' + str(ntest) + '.png')
+            mp.savefig(fig2_file)
 
-    # Plot contrast image
-    if plot_contrast:
-        if not make_contrast and not plot_histogram:
-            zvals = pickle.load(contrast_pickle)
-        fig3 = mp.figure()
-        mp.matshow(zvals)
-        mp.title('Contrast image')
-        fig3_file = os.path.join(out_path, 'contrast.png')
-        mp.savefig(fig3_file)
+        # Plot contrast image
+        if plot_contrast:
+            fig3 = mp.figure()
+            mp.matshow(zvalues)
+            mp.title('Test' + str(ntest) + ': Contrast image')
+            fig3_file = os.path.join(out_path, 'contrast_test' + str(ntest) + '.png')
+            mp.savefig(fig3_file)
+        """
