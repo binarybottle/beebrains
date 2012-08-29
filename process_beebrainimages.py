@@ -3,22 +3,23 @@
 Preprocessing steps:
 
 (1) Open a bee's table.
-(2) Convert each .pst image file listed in each row of the table
-    to nifti (neuroimaging file) format and create a slice stack
-    corresponding to each of two wavelengths.
-(3) Apply FSL's motion correction to each slice stack.
-(4) Divide the motion-corrected image volume for one
-    wavelength by the motion-corrected image for the second wavelength.
-(6) Smooth each ratio image with a Gaussian kernel.
+(2) Divide the .pst image files corresponding to one wavelength by those
+    corresponding to a second wavelength (assumed to be co-registered),
+    and save slice stack in nifti (neuroimaging file) format.
+(3) Apply FSL's motion correction.
+(4) Smooth each slice image with a Gaussian kernel.
 
 Processing steps:
 
 (1) Construct a design matrix
-(2) Apply a GLM to all voxels
+(2) Apply a general linear model to all voxels
 (3) Create a contrast image
 
-Contrast condition 1 vs. condition 2, holding condition 3 constant,
-in our case, sleep vs. awake holding concentration of odorant constant.
+Test 1. effect of odor vs. no odor (asleep, maximum concentration)
+Test 2. effect of odor vs. no odor (awake, maximum concentration)
+Test 3. effect of concentration (asleep)
+Test 4. effect of concentration (awake)
+Test 5. effect of asleep vs. awake (maximum concentration)
 
 Outputs: Nifti files for each table (for each bee).
 
@@ -54,7 +55,42 @@ from nipy.modalities.fmri.design_matrix import make_dmtx
 from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
 import nipy.labs.glm as GLM
 
-from settings import *
+#=============================================================================
+# Settings
+#=============================================================================
+xdim = 130  # x dimension for each image
+ydim = 172  # y dimension for each image
+images_per_run = 232  # number of images for a given set of conditions (or bee)
+onset_list = [73, 93]
+duration_list = [11, 11]
+amplitude_list = [0.000001, 0.0001, 0.001, 0.01]
+smooth_sigma = 1  # sigma of Gaussian kernel
+ext = '.nii.gz'  # output file extension
+
+#-----------------------------------------------------------------------------
+# Run processing steps (1=True, 0=False)
+#-----------------------------------------------------------------------------
+convert_images = 0  # convert .pst image slice stack to 2D nifti files
+divide_images  = 0  # divide one wavelength's image volume by the other
+correct_motion = 0  # apply registration to correct for motion
+smooth_images  = 0  # smooth the resulting motion-corrected images
+run_analysis   = 1
+ntests = 5
+plot_design_matrix = 1
+plot_histogram = 0
+plot_contrast = 1
+
+#-----------------------------------------------------------------------------
+# Table parameters (indices start from 0):
+#-----------------------------------------------------------------------------
+behavior_column = 1
+amplitude_column = 3
+wavelength_column = 4
+image_file_column = 5
+start1_column = 6
+stop1_column = 7
+start2_column = 8
+stop2_column = 9
 
 #-----------------------------------------------------------------------------
 # Command-line arguments and output file names
@@ -99,7 +135,7 @@ def norm_amplitudes(amplitudes):
 #=============================================================================
 # Loop through tests
 #=============================================================================
-for itest, test in enumerate(tests):
+for itest in range(ntests):
     ntest = itest + 1
     print('Test ' + str(ntest))
 
@@ -110,7 +146,8 @@ for itest, test in enumerate(tests):
         #---------------------------------------------------------------------
         # Test 1. effect of odor vs. no odor (asleep, maximum concentration)
         #---------------------------------------------------------------------
-        rows = [8, 9]
+        rows_lambda1 = [9]
+        rows_lambda2 = [10]
         conditions = [0, 0]
         amplitudes = [1, 1]
         onsets = [onset_list[0], onset_list[1]]
@@ -119,17 +156,19 @@ for itest, test in enumerate(tests):
         #---------------------------------------------------------------------
         # Test 2. effect of odor vs. no odor (awake, maximum concentration)
         #---------------------------------------------------------------------
-        rows = [18, 19]
+        rows_lambda1 = [19]
+        rows_lambda2 = [20]
         conditions = [0, 0]
         amplitudes = [1, 1]
         onsets = [onset_list[0], onset_list[1]]
         durations = duration_list
     elif ntest == 3:
         #---------------------------------------------------------------------
-        # Test 3. effect of concentration (asleep)
+        # Test 3. effect of odor concentration (asleep)
         #---------------------------------------------------------------------
-        rows = range(2, 10)
-        n_runs = len(rows)
+        rows_lambda1 = [3, 5, 7, 9]
+        rows_lambda2 = [4, 6, 8, 10]
+        n_runs = len(rows_lambda1)
         conditions = np.zeros(2 * len(amplitude_list), dtype=int).tolist()
         conditions.extend([x + 1 for x in range(n_runs)])
         oneruns = [1 for x in range(n_runs)]
@@ -138,19 +177,24 @@ for itest, test in enumerate(tests):
         amplitudes = [x for lst in amplitudes for x in lst]
         # Normalize amplitudes
         amplitudes = norm_amplitudes(amplitudes)
-        durations = []
-        [durations.extend(duration_list) for x in range(n_runs)]
         onsets = []
         for irun in range(n_runs):
             offset = irun * images_per_run
             onsets.append(offset + onset_list[0])
             onsets.append(offset + onset_list[1])
+        durations = []
+        [durations.extend(duration_list) for x in range(n_runs)]
+        for irun in range(n_runs):
+            offset = irun * images_per_run
+            onsets.append(offset)
+            durations.append(images_per_run)
     elif ntest == 4:
         #---------------------------------------------------------------------
-        # Test 4. effect of concentration (awake)
+        # Test 4. effect of odor concentration (awake)
         #---------------------------------------------------------------------
-        rows = range(12, 20)
-        n_runs = len(rows)
+        rows_lambda1 = [13, 15, 17, 19]
+        rows_lambda2 = [14, 16, 18, 20]
+        n_runs = len(rows_lambda1)
         conditions = np.zeros(2 * len(amplitude_list), dtype=int).tolist()
         conditions.extend([x + 1 for x in range(n_runs)])
         oneruns = [1 for x in range(n_runs)]
@@ -159,42 +203,49 @@ for itest, test in enumerate(tests):
         amplitudes = [x for lst in amplitudes for x in lst]
         # Normalize amplitudes
         amplitudes = norm_amplitudes(amplitudes)
-        durations = []
-        [durations.extend(duration_list) for x in range(n_runs)]
         onsets = []
         for irun in range(n_runs):
             offset = irun * images_per_run
             onsets.append(offset + onset_list[0])
             onsets.append(offset + onset_list[1])
+        durations = []
+        [durations.extend(duration_list) for x in range(n_runs)]
+        for irun in range(n_runs):
+            offset = irun * images_per_run
+            onsets.append(offset)
+            durations.append(images_per_run)
     elif ntest == 5:
         #---------------------------------------------------------------------
-        # Test 5. effect of asleep vs. awake (all concentrations)
+        # Test 5. effect of asleep vs. awake (maximum concentration)
         #---------------------------------------------------------------------
-        rows_asleep = range(2, 10)
-        rows_awake = range(12, 20)
-        rows = rows_asleep
-        rows.extend(rows_awake)
-        conditions = [0, 1]
-        amplitudes = [1, 1]
-        onsets = [0, len(rows_asleep)/2 * images_per_run]
-        durations = [len(rows_asleep)/2 * images_per_run,
-                     len(rows_awake)/2 * images_per_run]
+        rows_lambda1_asleep = [9]
+        rows_lambda2_asleep = [10]
+        rows_lambda1_awake = [19]
+        rows_lambda2_awake = [20]
+        rows_lambda1 = rows_lambda1_asleep
+        rows_lambda1.extend(rows_lambda1_awake)
+        rows_lambda2 = rows_lambda2_asleep
+        rows_lambda2.extend(rows_lambda2_awake)
+        conditions = [0, 0, 0, 0, 1, 2]
+        amplitudes = [1, 1, 1, 1, 1, 1]
+        onsets = [onset_list[0], onset_list[1],
+                  onset_list[0] + images_per_run, onset_list[1] + images_per_run,
+                  0, images_per_run]
+        durations = [duration_list[0], duration_list[1],
+                     duration_list[0], duration_list[1]]
+        durations.extend([images_per_run, images_per_run])
 
     #=========================================================================
-    # Preprocess (coregister, divide, and smooth) images
+    # Preprocess (divide, coregister, and smooth) images
     #=========================================================================
-    n_images = len(rows)/2 * images_per_run
-    converted_file1 = os.path.join(out_path,
-        'converted' + wavelengths[0] + '_test' + str(ntest) + ext)
-    converted_file2 = os.path.join(out_path,
-        'converted' + wavelengths[1] + '_test' + str(ntest) + ext)
+    n_images = len(rows_lambda1) * images_per_run
     ratio_file = os.path.join(out_path, 'ratio_test' + str(ntest) + ext)
     moco_file =  os.path.join(out_path, 'moco_test' + str(ntest) + ext)
     smooth_file = os.path.join(out_path, 'smooth_test' + str(ntest) + ext)
     #-------------------------------------------------------------------------
-    # Convert each .pst image file listed in each row of the table
-    # to nifti (neuroimaging file) format and create a slice stack
-    # corresponding to each of two wavelengths
+    # Divide the .pst image files corresponding to one wavelength by those
+    # corresponding to a second wavelength (assumed to be co-registered),
+    # and save slice stack in nifti (neuroimaging file) format
     #-------------------------------------------------------------------------
     if convert_images:
         print('Convert images...')
@@ -205,45 +256,51 @@ for itest, test in enumerate(tests):
         except IOError:
             print("  Cannot open " + table_file + ".")
 
-        # Loop through rows
-        count1 = 0
-        count2 = 0
-        image_stack1 = np.zeros((xdim, ydim, 1, n_images))
-        image_stack2 = np.zeros((xdim, ydim, 1, n_images))
+        # Loop through wavelength 1 rows and stack images
+        count = 0
+        image_stack = np.zeros((xdim, ydim, 1, n_images), dtype=float)
         for irow, row in enumerate(csv_reader):
-            if irow in rows:
-
-                # Load .pst file
+            if irow in rows_lambda1:
+                # Load .pst file containing multiple images
                 file = os.path.join(images_dir, row[image_file_column])
-                wavelength = row[wavelength_column]
-                print('  Loading ' + file + ' and converting images...')
+                print('  Loading ' + file + ' and stacking images...')
                 raw = np.fromfile(file, dtype='<i2')
                 for iframe in range(images_per_run):
-                    image_vector = raw[iframe * xdim * ydim : (iframe + 1) * xdim * ydim]
+                    image_vector = raw[iframe * xdim * ydim :
+                                       (iframe + 1) * xdim * ydim]
                     image_matrix = np.reshape(image_vector, (xdim, ydim))
+                    # Stack
+                    image_stack[:, :, 0, count] = image_matrix
+                    count += 1
 
-                    # Stack images
-                    if wavelength == wavelengths[0]:
-                        image_stack1[:, :, 0, count1] = image_matrix
-                        count1 += 1
-                    elif wavelength == wavelengths[1]:
-                        image_stack2[:, :, 0, count2] = image_matrix
-                        count2 += 1
+        # Reload table
+        try:
+            csv_reader = csv.reader(open(table_file, 'rU'), dialect=csv.excel_tab)
+        except IOError:
+            print("  Cannot open " + table_file + ".")
 
-        nb.save(nb.Nifti1Image(image_stack1, np.eye(4)), converted_file1)
-        nb.save(nb.Nifti1Image(image_stack2, np.eye(4)), converted_file2)
+        # Loop through wavelength 2 rows and divide wavelength 1 images
+        count = 0
+        for irow, row in enumerate(csv_reader):
+            if irow in rows_lambda2:
+                # Load .pst file containing multiple images
+                file = os.path.join(images_dir, row[image_file_column])
+                print('  Loading ' + file + ' and dividing wavelength images...')
+                raw = np.fromfile(file, dtype='<i2')
+                for iframe in range(images_per_run):
+                    image_vector = raw[iframe * xdim * ydim :
+                                       (iframe + 1) * xdim * ydim]
+                    image_matrix = np.reshape(image_vector, (xdim, ydim))
+                    # Divide first by second wavelength (alternate rows)
+                    # NOTE: two wavelength images assumed to be co-registered
+                    image_stack[:, :, 0, count] = \
+                    image_stack[:, :, 0, count] / image_matrix
+                    count += 1
+
+        nb.save(nb.Nifti1Image(image_stack, np.eye(4)), ratio_file)
 
     #-------------------------------------------------------------------------
-    # Divide the image volume for one wavelength by the motion-corrected
-    # image for the second wavelength (assumded to be aligned slice-wise)
-    #-------------------------------------------------------------------------
-    if divide_images:
-        print('Dividing image volume of wavelength 1 by image volume of wavelength 2...')
-        cmd = ['  fslmaths', converted_file1, '-div', converted_file2, ratio_file]
-        print(' '.join(cmd)); os.system(' '.join(cmd))
-
-    #-------------------------------------------------------------------------
-    # Apply FSL's motion correction to each slice stack
+    # Apply FSL's motion correction
     #-------------------------------------------------------------------------
     if correct_motion:
         print('Correcting motion...')
@@ -255,7 +312,7 @@ for itest, test in enumerate(tests):
         # print(' '.join(cmd)); os.system(' '.join(cmd))
 
     #-------------------------------------------------------------------------
-    # Smooth each ratio image with a Gaussian kernel.
+    # Smooth each slice image with a Gaussian kernel
     #-------------------------------------------------------------------------
     if smooth_images:
         print('Smoothing image')
@@ -296,7 +353,7 @@ for itest, test in enumerate(tests):
             mp.title('Block design matrix')
             fig1_file = os.path.join(out_path, 'design_matrix_test' + str(ntest) + '.png')
             mp.savefig(fig1_file)
-        """
+
         #-----------------------------------------------------------------
         # Apply a general linear model to all pixels
         #-----------------------------------------------------------------
@@ -344,4 +401,3 @@ for itest, test in enumerate(tests):
             mp.title('Test' + str(ntest) + ': Contrast image')
             fig3_file = os.path.join(out_path, 'contrast_test' + str(ntest) + '.png')
             mp.savefig(fig3_file)
-        """
