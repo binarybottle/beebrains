@@ -53,7 +53,7 @@ import numpy as np
 import pylab as mp
 from nipy.modalities.fmri.design_matrix import make_dmtx
 from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
-import nipy.labs.glm as GLM
+from nipy.modalities.fmri.glm import GeneralLinearModel, data_scaling
 
 #=============================================================================
 # Settings
@@ -131,6 +131,32 @@ def norm_amplitudes(amplitudes):
     return [max([x, 0]) for x in norm_amps]
     #amplitudes = np.array(amplitudes)
     #return amplitudes / max(amplitudes)
+
+def mycmap(E, Z, thresh, sign='pos'):
+    """Create a figure whose opacity reflects the statistical significance
+    E = effect size
+    Z = Zscore
+    thresh = value to threshold Zscore at
+    """
+    tmp = mp.cm.jet((1+E/np.max(np.abs(E)))/2.)
+    if sign == 'pos':
+        opacity = Z/thresh
+    elif sign == 'neg':
+        opacity = -Z/thresh
+    elif sign == 'abs':
+        opacity = abs(Z)/thresh
+    else:
+        raise ValueError("sign must be one of 'pos', 'neg', 'abs'")
+    opacity[opacity>1] = 1.0
+    opacity[opacity<0.2] = 0.0
+    tmp[:,:,3] = opacity
+    return tmp
+
+def draw_overlay(E,Z, thresh=3.):
+    """Draw overlay and contour around statistical threshold
+    """
+    mp.imshow(mycmap(E, Z, thresh))
+    mp.contour(Z > thresh, 1)
 
 #=============================================================================
 # Loop through tests
@@ -306,10 +332,6 @@ for itest in range(ntests):
         print('Correcting motion...')
         cmd = ['  mcflirt -in', ratio_file, '-out', moco_file]
         print(' '.join(cmd)); os.system(' '.join(cmd))
-        # cmd = ['  mcflirt -in', ratio_file, '-out moco -edge']
-        # print(' '.join(cmd)); os.system(' '.join(cmd))
-        # cmd = ['  mv crefvol_moco.nii.gz', moco_file]
-        # print(' '.join(cmd)); os.system(' '.join(cmd))
 
     #-------------------------------------------------------------------------
     # Smooth each slice image with a Gaussian kernel
@@ -343,7 +365,7 @@ for itest in range(ntests):
         frametimes = np.linspace(0, n_images-1, n_images)
 
         dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR',
-                         drift_model='Blank', hfcut=np.inf)
+                         drift_model='polynomial', drift_order=2, hfcut=np.inf)
         design_matrix = dmtx.matrix
 
         # Plot the design matrix
@@ -358,10 +380,12 @@ for itest in range(ntests):
         # Apply a general linear model to all pixels
         #-----------------------------------------------------------------
         print('   Apply general linear model...')
-        method = "kalman"
         model = "ar1"
-        glm = GLM.glm()
-        glm.fit(image_stack.T, design_matrix, method=method, model=model)
+        glm = GeneralLinearModel(design_matrix)
+        mask = np.sum(img.get_data(), axis=-1)>0
+        data, mean = data_scaling(img.get_data()[mask].T)
+        mean.shape = mask.shape
+        glm.fit(data, model=model)
 
         #-----------------------------------------------------------------
         # Create a contrast image
@@ -373,13 +397,21 @@ for itest in range(ntests):
 
         # Specify the contrast [1 -1 0 ..]
         contrast = np.zeros(design_matrix.shape[1])
-        contrast[0] = 1
-        contrast[1] = -1
+        if ntest < 5:
+            contrast[0] = 1
+        else:
+            contrast[1] = 1
+            contrast[2] = -1
+        #contrast[1] = -1
         glm_contrast = glm.contrast(contrast)
 
         # Compute the contrast image
-        zvalues = glm_contrast.zscore().squeeze()
-        contrast_image = nb.Nifti1Image(zvalues.T, np.eye(4))
+        zvalues = glm_contrast.z_score()
+        zvalues.shape = mask.shape
+        effect = glm_contrast.effect.copy()
+        effect.shape = mask.shape
+
+        contrast_image = nb.Nifti1Image(zvalues, np.eye(4))
 
         # Save the contrast as an image
         contrast_file = os.path.join(out_path, 'zmap_test' + str(ntest) + ext)
@@ -397,7 +429,8 @@ for itest in range(ntests):
         # Plot contrast image
         if plot_contrast:
             fig3 = mp.figure()
-            mp.matshow(zvalues)
+            mp.imshow(np.squeeze(mean).T, cmap=mp.cm.gray)
+            draw_overlay(np.squeeze(effect).T, np.squeeze(zvalues).T, thresh=3.74)
             mp.title('Test' + str(ntest) + ': Contrast image')
             fig3_file = os.path.join(out_path, 'contrast_test' + str(ntest) + '.png')
             mp.savefig(fig3_file)
