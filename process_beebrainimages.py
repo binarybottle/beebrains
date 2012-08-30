@@ -65,6 +65,7 @@ onset_list = [73, 93]
 duration_list = [11, 11]
 amplitude_list = [0.000001, 0.0001, 0.001, 0.01]
 smooth_sigma = 1  # sigma of Gaussian kernel
+zthresh = 3.74  # threshold zvalues
 ext = '.nii.gz'  # output file extension
 
 #-----------------------------------------------------------------------------
@@ -432,7 +433,8 @@ for itest in range(ntests):
             if plot_contrast:
                 fig3 = mp.figure()
                 mp.imshow(np.squeeze(mean).T, cmap=mp.cm.gray)
-                draw_overlay(np.squeeze(effect).T, np.squeeze(zvalues).T, thresh=3.74)
+                if np.max(effect) > zthresh and np.max(zvalues) > zthresh:
+                    draw_overlay(np.squeeze(effect).T, np.squeeze(zvalues).T, thresh=zthresh)
                 mp.title('Test' + str(ntest) + ': Contrast image')
                 fig3_file = os.path.join(out_path, 'contrast_test' + str(ntest) + '.png')
                 mp.savefig(fig3_file)
