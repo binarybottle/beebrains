@@ -70,10 +70,10 @@ ext = '.nii.gz'  # output file extension
 #-----------------------------------------------------------------------------
 # Run processing steps (1=True, 0=False)
 #-----------------------------------------------------------------------------
-convert_images = 0  # convert .pst image slice stack to 2D nifti files
-divide_images  = 0  # divide one wavelength's image volume by the other
-correct_motion = 0  # apply registration to correct for motion
-smooth_images  = 0  # smooth the resulting motion-corrected images
+convert_images = 1  # convert .pst image slice stack to 2D nifti files
+divide_images  = 1  # divide one wavelength's image volume by the other
+correct_motion = 1  # apply registration to correct for motion
+smooth_images  = 1  # smooth the resulting motion-corrected images
 run_analysis   = 1
 ntests = 5
 plot_design_matrix = 1
@@ -343,14 +343,12 @@ for itest in range(ntests):
 
     #=========================================================================
     # Conduct a general linear model analysis on the preprocessed images per test
-    # (Requires image_stack and the following paradigm lists from above:
+    # (Requires the preprocessed image and the following paradigm lists from above:
     #  conditions, onsets, durations, amplitudes)
     #=========================================================================
     if run_analysis:
         ('Run general linear model analysis for each test...')
-        if not smooth_images:
-            img = nb.load(smooth_file)
-            image_stack = img.get_data()
+        img = nb.load(smooth_file)
 
         #-----------------------------------------------------------------
         # Construct a design matrix for each test
@@ -377,60 +375,64 @@ for itest in range(ntests):
             mp.savefig(fig1_file)
 
         #-----------------------------------------------------------------
-        # Apply a general linear model to all pixels
+        # Mean-scale, de-mean and multiply data by 100
         #-----------------------------------------------------------------
-        print('   Apply general linear model...')
-        model = "ar1"
-        glm = GeneralLinearModel(design_matrix)
-        mask = np.sum(img.get_data(), axis=-1)>0
+        mask = np.sum(img.get_data(), axis=-1) > 0
         data, mean = data_scaling(img.get_data()[mask].T)
-        mean.shape = mask.shape
-        glm.fit(data, model=model)
+        if np.size(data):
+            mean.shape = mask.shape
 
-        #-----------------------------------------------------------------
-        # Create a contrast image
-        #
-        # Contrast condition 1 vs. condition 2, holding condition 3 constant
-        # (sleep vs. awake holding concentration of odorant constant)
-        #-----------------------------------------------------------------
-        print('  Make contrast image...')
+            #-----------------------------------------------------------------
+            # Apply a general linear model to all pixels
+            #-----------------------------------------------------------------
+            print('   Apply general linear model...')
+            model = "ar1"
+            glm = GeneralLinearModel(design_matrix)
+            glm.fit(data, model=model)
 
-        # Specify the contrast [1 -1 0 ..]
-        contrast = np.zeros(design_matrix.shape[1])
-        if ntest < 5:
-            contrast[0] = 1
-        else:
-            contrast[1] = 1
-            contrast[2] = -1
-        #contrast[1] = -1
-        glm_contrast = glm.contrast(contrast)
+            #-----------------------------------------------------------------
+            # Create a contrast image
+            #
+            # Contrast condition 1 vs. condition 2, holding condition 3 constant
+            # (sleep vs. awake holding concentration of odorant constant)
+            #-----------------------------------------------------------------
+            print('  Make contrast image...')
 
-        # Compute the contrast image
-        zvalues = glm_contrast.z_score()
-        zvalues.shape = mask.shape
-        effect = glm_contrast.effect.copy()
-        effect.shape = mask.shape
+            # Specify the contrast [1 -1 0 ..]
+            contrast = np.zeros(design_matrix.shape[1])
+            if ntest < 5:
+                contrast[0] = 1
+            else:
+                contrast[1] = 1
+                contrast[2] = -1
+            #contrast[1] = -1
+            glm_contrast = glm.contrast(contrast)
 
-        contrast_image = nb.Nifti1Image(zvalues, np.eye(4))
+            # Compute the contrast image
+            zvalues = glm_contrast.z_score()
+            zvalues.shape = mask.shape
+            effect = glm_contrast.effect.copy()
+            effect.shape = mask.shape
 
-        # Save the contrast as an image
-        contrast_file = os.path.join(out_path, 'zmap_test' + str(ntest) + ext)
-        nb.save(contrast_image, contrast_file)
+            # Save the contrast as an image
+            contrast_image = nb.Nifti1Image(zvalues, np.eye(4))
+            contrast_file = os.path.join(out_path, 'zmap_test' + str(ntest) + ext)
+            nb.save(contrast_image, contrast_file)
 
-        # Plot histogram
-        if plot_histogram:
-            h, c = np.histogram(zvalues, 100)
-            fig2 = mp.figure()
-            mp.plot(c[: - 1], h)
-            mp.title('Test' + str(ntest) + ': Histogram of the z-values')
-            fig2_file = os.path.join(out_path, 'histogram_test' + str(ntest) + '.png')
-            mp.savefig(fig2_file)
+            # Plot histogram
+            if plot_histogram:
+                h, c = np.histogram(zvalues, 100)
+                fig2 = mp.figure()
+                mp.plot(c[: - 1], h)
+                mp.title('Test' + str(ntest) + ': Histogram of the z-values')
+                fig2_file = os.path.join(out_path, 'histogram_test' + str(ntest) + '.png')
+                mp.savefig(fig2_file)
 
-        # Plot contrast image
-        if plot_contrast:
-            fig3 = mp.figure()
-            mp.imshow(np.squeeze(mean).T, cmap=mp.cm.gray)
-            draw_overlay(np.squeeze(effect).T, np.squeeze(zvalues).T, thresh=3.74)
-            mp.title('Test' + str(ntest) + ': Contrast image')
-            fig3_file = os.path.join(out_path, 'contrast_test' + str(ntest) + '.png')
-            mp.savefig(fig3_file)
+            # Plot contrast image
+            if plot_contrast:
+                fig3 = mp.figure()
+                mp.imshow(np.squeeze(mean).T, cmap=mp.cm.gray)
+                draw_overlay(np.squeeze(effect).T, np.squeeze(zvalues).T, thresh=3.74)
+                mp.title('Test' + str(ntest) + ': Contrast image')
+                fig3_file = os.path.join(out_path, 'contrast_test' + str(ntest) + '.png')
+                mp.savefig(fig3_file)
