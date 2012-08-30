@@ -1,5 +1,19 @@
 #!/usr/bin/python
 """
+Process bee brain calcium images using fMRI techniques.
+
+Command:
+python <this file> <table file> <image directory> <output directory> <label>
+
+Example:
+python imageB.py data/Bee1_lr120313l.txt data/Bee1_lr120313l.pst output bee1
+
+Test 1. effect of odor vs. no odor (asleep, maximum concentration)
+Test 2. effect of odor vs. no odor (awake, maximum concentration)
+Test 3. effect of concentration (asleep)
+Test 4. effect of concentration (awake)
+Test 5. effect of asleep vs. awake (maximum concentration)
+
 Preprocessing steps:
 
 (1) Open a bee's table.
@@ -11,36 +25,34 @@ Preprocessing steps:
 
 Processing steps:
 
-(1) Construct a design matrix
-(2) Apply a general linear model to all voxels
-(3) Create a contrast image
+(1) Mean-scale, de-mean and multiply data by 100
+(2) Make the amplitude values span interval [0,1] better
+(3) Construct a design matrix from conditions, amplitudes, onsets, and durations,
+     with a 2nd degree polynomial drift model to remove linear or quadratic trends in the data
+(4) Apply a general linear model to all voxels
+(5) Create a contrast image
 
-Test 1. effect of odor vs. no odor (asleep, maximum concentration)
-Test 2. effect of odor vs. no odor (awake, maximum concentration)
-Test 3. effect of concentration (asleep)
-Test 4. effect of concentration (awake)
-Test 5. effect of asleep vs. awake (maximum concentration)
+Plotting steps:
 
-Outputs: Nifti files for each table (for each bee).
+(1) Create a figure whose color indicates effect size and opacity reflects statistical significance
+(2) Draw overlay and contour around a statistical threshold
 
-Command:
-python <this file> <table file> <image directory> <output directory>
-
-Example:
-python process_beebrainimages.py data/Bee1_lr120313l.txt data/Bee1_lr120313l.pst output
+Outputs: Nifti and .png image files for each table (for each bee).
 
 Requirements:
 * Python libraries:  nibabel, numpy, scipy, nipy
-* ANTS registration software for motion correction
-* ImageMagick -- only if creating montages/movies
+* FSL's mcflirt registration software for motion correction
 
-fMRI-based analysis with much-appreciated help from Satrajit S. Ghosh
-and after Bertrand Thirion's examples:
+fMRI-based analysis after Bertrand Thirion's examples:
 https://github.com/nipy/nipy/blob/master/examples/labs/demo_dmtx.py
 https://github.com/nipy/nipy/blob/master/examples/labs/example_glm.py
 
-(c) 2012  Arno Klein, under Apache License Version 2.0
-          arno@binarybottle.com  .  www.binarybottle.com
+
+Authors:
+Arno Klein          arno@binarybottle.com  .  www.binarybottle.com
+Satrajit S. Ghosh   satra@mit.edu
+
+(c) 2012  Mindbogglers (http://mindboggle.info) under Apache License Version 2.0
 """
 
 #-----------------------------------------------------------------------------
@@ -64,9 +76,9 @@ images_per_run = 232  # number of images for a given set of conditions (or bee)
 onset_list = [73, 93]
 duration_list = [11, 11]
 amplitude_list = [0.000001, 0.0001, 0.001, 0.01]
-smooth_sigma = 1  # sigma of Gaussian kernel
+smooth_sigma = 3  # sigma of Gaussian kernel
 zthresh = 3.74  # threshold zvalues
-maxz = 100  # maximum zvalue
+max_effect = 100  # maximum effect size
 ext = '.nii.gz'  # output file extension
 
 #-----------------------------------------------------------------------------
@@ -75,7 +87,7 @@ ext = '.nii.gz'  # output file extension
 convert_images = 0  # convert .pst image slice stack to 2D nifti files
 divide_images  = 0  # divide one wavelength's image volume by the other
 correct_motion = 0  # apply registration to correct for motion
-smooth_images  = 0  # smooth the resulting motion-corrected images
+smooth_images  = 1  # smooth the resulting motion-corrected images
 run_analysis   = 1
 ntests = 5
 plot_design_matrix = 1
@@ -97,31 +109,26 @@ stop2_column = 9
 #-----------------------------------------------------------------------------
 # Command-line arguments and output file names
 #-----------------------------------------------------------------------------
-args = sys.argv[1:]
+args = sys.argv[:]
 if len(args)<3:
     print("\n\t Please provide the names of two directories: \
                 one containing .lst table files, another to save output.")
-    print("\t Example: python " + sys.argv[0] + \
-          " data/Bee1_lr120313l.txt data/Bee1_lr120313l.pst output")
+    print("\t Example: python " + args[0] + \
+          " data/Bee1_lr120313l.txt data/Bee1_lr120313l.pst output bee1")
     sys.exit()
 else:
-    table_file = str(args[0])
-    images_dir = str(args[1])
-    output_path = str(args[2])
+    table_file = str(args[1])
+    images_dir = str(args[2])
+    out_path = str(args[3])
     try:
-        if not os.path.exists(output_path):
-            os.mkdir(output_path)
+        if not os.path.exists(out_path):
+            os.mkdir(out_path)
     except IOError:
-        print("Cannot make " + output_path + " directory.")
-
-# Output directory
-in_stem = os.path.splitext(os.path.basename(table_file))[0]
-out_path = os.path.join(output_path, in_stem)
-try:
-    if not os.path.exists(out_path):
-        os.mkdir(out_path)
-except IOError:
-    print("Cannot make " + out_path + " directory.")
+        print("Cannot make " + out_path + " directory.")
+    if len(args) > 4:
+        label = str(args[4]) + '_'
+    else:
+        label = ''
 
 #-----------------------------------------------------------------------------
 # Functions
@@ -165,7 +172,6 @@ def draw_overlay(E,Z, thresh=3.):
 #=============================================================================
 for itest in range(ntests):
     ntest = itest + 1
-    print('Test ' + str(ntest))
 
     #=========================================================================
     # Models for analysis
@@ -174,6 +180,8 @@ for itest in range(ntests):
         #---------------------------------------------------------------------
         # Test 1. effect of odor vs. no odor (asleep, maximum concentration)
         #---------------------------------------------------------------------
+        desc = 'Odor vs. no odor: asleep (max. concentration)'
+        print(desc)
         rows_lambda1 = [9]
         rows_lambda2 = [10]
         conditions = [0, 0]
@@ -184,6 +192,8 @@ for itest in range(ntests):
         #---------------------------------------------------------------------
         # Test 2. effect of odor vs. no odor (awake, maximum concentration)
         #---------------------------------------------------------------------
+        desc = 'Odor vs. no odor: awake (max. concentration)'
+        print(desc)
         rows_lambda1 = [19]
         rows_lambda2 = [20]
         conditions = [0, 0]
@@ -194,6 +204,8 @@ for itest in range(ntests):
         #---------------------------------------------------------------------
         # Test 3. effect of odor concentration (asleep)
         #---------------------------------------------------------------------
+        desc = 'Effect of odor concentration: asleep'
+        print(desc)
         rows_lambda1 = [3, 5, 7, 9]
         rows_lambda2 = [4, 6, 8, 10]
         n_runs = len(rows_lambda1)
@@ -220,6 +232,8 @@ for itest in range(ntests):
         #---------------------------------------------------------------------
         # Test 4. effect of odor concentration (awake)
         #---------------------------------------------------------------------
+        desc = 'Effect of odor concentration: awake'
+        print(desc)
         rows_lambda1 = [13, 15, 17, 19]
         rows_lambda2 = [14, 16, 18, 20]
         n_runs = len(rows_lambda1)
@@ -246,6 +260,8 @@ for itest in range(ntests):
         #---------------------------------------------------------------------
         # Test 5. effect of asleep vs. awake (maximum concentration)
         #---------------------------------------------------------------------
+        desc = 'Asleep vs. awake (max. concentration)'
+        print(desc)
         rows_lambda1_asleep = [9]
         rows_lambda2_asleep = [10]
         rows_lambda1_awake = [19]
@@ -267,9 +283,9 @@ for itest in range(ntests):
     # Preprocess (divide, coregister, and smooth) images
     #=========================================================================
     n_images = len(rows_lambda1) * images_per_run
-    ratio_file = os.path.join(out_path, 'ratio_test' + str(ntest) + ext)
-    moco_file =  os.path.join(out_path, 'moco_test' + str(ntest) + ext)
-    smooth_file = os.path.join(out_path, 'smooth_test' + str(ntest) + ext)
+    ratio_file = os.path.join(out_path, label + 'ratio_test' + str(ntest) + ext)
+    moco_file =  os.path.join(out_path, label + 'moco_test' + str(ntest) + ext)
+    smooth_file = os.path.join(out_path, label + 'smooth_test' + str(ntest) + ext)
     #-------------------------------------------------------------------------
     # Divide the .pst image files corresponding to one wavelength by those
     # corresponding to a second wavelength (assumed to be co-registered),
@@ -372,8 +388,9 @@ for itest in range(ntests):
         if plot_design_matrix:
             fig1 = mp.figure(figsize=(10, 6))
             dmtx.show()
-            mp.title('Block design matrix')
-            fig1_file = os.path.join(out_path, 'design_matrix_test' + str(ntest) + '.png')
+            mp.title(desc)
+            fig1_file = os.path.join(out_path, label + 'design_matrix_test' + \
+                                               str(ntest) + '.png')
             mp.savefig(fig1_file)
 
         #-----------------------------------------------------------------
@@ -407,7 +424,6 @@ for itest in range(ntests):
             else:
                 contrast[1] = 1
                 contrast[2] = -1
-            #contrast[1] = -1
             glm_contrast = glm.contrast(contrast)
 
             # Compute the contrast image
@@ -416,31 +432,22 @@ for itest in range(ntests):
             effect = glm_contrast.effect.copy()
             effect.shape = mask.shape
 
-            # Save the contrast as an image
+            # Save the contrast as an image in a neuroimaging format
             contrast_image = nb.Nifti1Image(zvalues, np.eye(4))
-            contrast_file = os.path.join(out_path, 'zmap_test' + str(ntest) + ext)
+            contrast_file = os.path.join(out_path,
+                                    label + 'zmap_test' + str(ntest) + ext)
             nb.save(contrast_image, contrast_file)
-
-            # Plot histogram
-            if plot_histogram:
-                h, c = np.histogram(zvalues, 100)
-                fig2 = mp.figure()
-                mp.plot(c[: - 1], h)
-                mp.title('Test' + str(ntest) + ': Histogram of the z-values')
-                fig2_file = os.path.join(out_path, 'histogram_test' + str(ntest) + '.png')
-                mp.savefig(fig2_file)
 
             # Plot contrast image
             if plot_contrast:
+                print('    Plotting contrast image...')
                 fig3 = mp.figure()
                 mp.imshow(np.squeeze(mean).T, cmap=mp.cm.gray)
-                if np.max(effect) > zthresh and np.max(zvalues) > zthresh and \
-                   np.max(effect) < maxz and np.max(values) < maxz:
-                    print(np.max(effect), np.max(zvalues))
-                    print(np.shape(effect), np.shape(zvalues))
-                    print(effect)
-                    print(zvalues)
-                    draw_overlay(np.squeeze(effect).T, np.squeeze(zvalues).T, thresh=zthresh)
-                mp.title('Test' + str(ntest) + ': Contrast image')
-                fig3_file = os.path.join(out_path, 'contrast_test' + str(ntest) + '.png')
+                if np.max(zvalues) > zthresh and np.max(effect) < max_effect:
+                    print('    Plotting overlays...')
+                    draw_overlay(np.squeeze(effect).T, np.squeeze(zvalues).T,
+                                 thresh=zthresh)
+                mp.title(desc)
+                fig3_file = os.path.join(out_path,
+                                    label + 'contrast_test' + str(ntest) + '.png')
                 mp.savefig(fig3_file)
