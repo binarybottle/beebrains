@@ -66,15 +66,16 @@ duration_list = [11, 11]
 amplitude_list = [0.000001, 0.0001, 0.001, 0.01]
 smooth_sigma = 1  # sigma of Gaussian kernel
 zthresh = 3.74  # threshold zvalues
+maxz = 100  # maximum zvalue
 ext = '.nii.gz'  # output file extension
 
 #-----------------------------------------------------------------------------
 # Run processing steps (1=True, 0=False)
 #-----------------------------------------------------------------------------
-convert_images = 1  # convert .pst image slice stack to 2D nifti files
-divide_images  = 1  # divide one wavelength's image volume by the other
-correct_motion = 1  # apply registration to correct for motion
-smooth_images  = 1  # smooth the resulting motion-corrected images
+convert_images = 0  # convert .pst image slice stack to 2D nifti files
+divide_images  = 0  # divide one wavelength's image volume by the other
+correct_motion = 0  # apply registration to correct for motion
+smooth_images  = 0  # smooth the resulting motion-corrected images
 run_analysis   = 1
 ntests = 5
 plot_design_matrix = 1
@@ -433,7 +434,12 @@ for itest in range(ntests):
             if plot_contrast:
                 fig3 = mp.figure()
                 mp.imshow(np.squeeze(mean).T, cmap=mp.cm.gray)
-                if np.max(effect) > zthresh and np.max(zvalues) > zthresh:
+                if np.max(effect) > zthresh and np.max(zvalues) > zthresh and \
+                   np.max(effect) < maxz and np.max(values) < maxz:
+                    print(np.max(effect), np.max(zvalues))
+                    print(np.shape(effect), np.shape(zvalues))
+                    print(effect)
+                    print(zvalues)
                     draw_overlay(np.squeeze(effect).T, np.squeeze(zvalues).T, thresh=zthresh)
                 mp.title('Test' + str(ntest) + ': Contrast image')
                 fig3_file = os.path.join(out_path, 'contrast_test' + str(ntest) + '.png')
