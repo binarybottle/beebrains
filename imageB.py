@@ -87,7 +87,7 @@ ext = '.nii.gz'  # output file extension
 convert_images = 0  # convert .pst image slice stack to 2D nifti files
 divide_images  = 0  # divide one wavelength's image volume by the other
 correct_motion = 0  # apply registration to correct for motion
-smooth_images  = 1  # smooth the resulting motion-corrected images
+smooth_images  = 0  # smooth the resulting motion-corrected images
 run_analysis   = 1
 ntests = 5
 plot_design_matrix = 1
@@ -380,8 +380,11 @@ for itest in range(ntests):
                                  duration=durations, amplitude=amplitudes)
         frametimes = np.linspace(0, n_images-1, n_images)
 
-        dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR',
-                         drift_model='polynomial', drift_order=2, hfcut=np.inf)
+        if ntest < 3:
+            dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR',
+                             drift_model='polynomial', drift_order=2, hfcut=np.inf)
+        else:
+            dmtx = make_dmtx(frametimes, paradigm, hrf_model='FIR', hfcut=np.inf)
         design_matrix = dmtx.matrix
 
         # Plot the design matrix
