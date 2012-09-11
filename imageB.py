@@ -47,6 +47,23 @@ fMRI-based analysis after Bertrand Thirion's examples:
 https://github.com/nipy/nipy/blob/master/examples/labs/demo_dmtx.py
 https://github.com/nipy/nipy/blob/master/examples/labs/example_glm.py
 
+Installation:
+https://github.com/binarybottle/beebrains
+0. first time (one time): $ git clone git@github.com:binarybottle/beebrains.git
+   update: $ git pull
+1. install enthought python distribution (EPD)
+2. install nibabel:
+   $ easy_install nibble
+3. install nipy:
+   set up ssh-key in github.com account
+   $ git clone git@github.com:nipy/nipy.git
+   within nippy directory:
+   $ python setup.py install
+4. install ants:
+   download .dmg file
+   set up ants path in .bash_profile (in home directory)
+   and/or install fmrib's fsl:
+
 
 Authors:
 Arno Klein          arno@binarybottle.com  .  www.binarybottle.com
