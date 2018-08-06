@@ -41,7 +41,7 @@ Outputs: Nifti and .png image files for each table (for each bee).
 
 Requirements:
 * Python libraries:  nibabel, numpy, scipy, nipy
-* FSL's mcflirt registration software for motion correction
+* FSL's mcflirt registration software for motion correction (https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/MCFLIRT)
 
 fMRI-based analysis after Bertrand Thirion's examples:
 https://github.com/nipy/nipy/blob/master/examples/labs/demo_dmtx.py
@@ -51,15 +51,14 @@ Installation:
 https://github.com/binarybottle/beebrains
 0. first time (one time): $ git clone git@github.com:binarybottle/beebrains.git
    update: $ git pull
-1. install enthought python distribution (EPD)
+1. install python distribution (e.g., Continuum's Anaconda: https://www.anaconda.com/)
 2. install nibabel:
    $ easy_install nibble
 3. install nipy:
-   set up ssh-key in github.com account
    $ git clone git@github.com:nipy/nipy.git
-   within nippy directory:
+   $ cd nipy
    $ python setup.py install
-4. install FSL's mcflirt registration software for motion correction
+4. install FSL (https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/)
 
 
 Authors:
