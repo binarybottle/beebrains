@@ -59,10 +59,7 @@ https://github.com/binarybottle/beebrains
    $ git clone git@github.com:nipy/nipy.git
    within nippy directory:
    $ python setup.py install
-4. install ants:
-   download .dmg file
-   set up ants path in .bash_profile (in home directory)
-   and/or install fmrib's fsl:
+4. install FSL's mcflirt registration software for motion correction
 
 
 Authors:
